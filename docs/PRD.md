@@ -25,9 +25,9 @@
 
 一个自部署的倒计时同步系统：
 
-- **子午服务**（Go）持有唯一的倒计时，通过 SSE 把状态推给所有人。
+- **子午服务**（Go）持有若干「房间」，每个房间一个倒计时，通过 SSE 把状态推给房间里的所有人。
 - **子午控制台**（网页）给操作者开始、暂停、延长、结束倒计时，管理预设和提醒。
-- **子午**（Flutter Windows 客户端）只填一个地址就能显示倒计时，可以贴在屏幕边缘、保持置顶，收到提醒时弹出自绘卡片。
+- **子午**（Flutter Windows 客户端）只填一个房间地址就能显示该房间的倒计时，可以贴在屏幕边缘、保持置顶，收到提醒时弹出自绘卡片。
 
 ### 1.3 目标
 
@@ -42,7 +42,7 @@
 ### 1.4 非目标（1.0 不做）
 
 - 账号体系、多租户、权限分级。控制台只有一个管理口令。
-- 多路并行倒计时（一个服务只有一个倒计时）。接口路径为未来的「频道」留出位置，见 D-5。
+- 多路并行倒计时：1.0 不做；1.1 起以「房间」提供，见 D-11。
 - 正计时 / 秒表（「超时」计数除外）。
 - 移动端、macOS、Linux 客户端（Flutter 可以以后再扩）。
 - 系统通知中心通知、提示音。
@@ -136,14 +136,15 @@ meridian/
 
 | 概念 | 定义 |
 | --- | --- |
-| 计时（Timer） | 服务上唯一的倒计时。任一时刻只有一个 |
+| 房间（Room） | 一路独立的倒计时。有唯一的 `id`（UUIDv7）和一个「房间名」；房间名可以重复，只用于辨认，与倒计时的「标题」无关。服务上可以有多个房间同时计时 |
+| 计时（Timer） | 房间里唯一的倒计时。每个房间任一时刻只有一个 |
 | 一轮（Run） | 从「开始」到「结束」的一次倒计时，有唯一 `run_id`。再次开始即新的一轮 |
 | 总时长 `total` | 进度条的满格长度 |
 | 剩余 `remaining` | 还剩多少时间。进度 = remaining / total |
 | 超时 `overtime` | 剩余归零后继续正向计数的时间（仅当预设选择「到时后计超时」） |
-| 预设（Preset） | 一组可复用配置：名称、标题、总时长、提醒、到时行为 |
+| 预设（Preset） | 一组可复用配置：名称、标题、总时长、提醒、到时行为。所有房间共用 |
 | 提醒（Reminder） | 剩余时间降到某个点时，向所有客户端推一张卡片 |
-| 序号 `seq` | 状态版本号，每次状态变化 +1，单调递增。客户端丢弃旧版本 |
+| 序号 `seq` | 状态版本号，每次状态变化 +1，单调递增，每个房间各自计数。客户端丢弃旧版本 |
 
 ---
 
@@ -254,16 +255,18 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 | SRV-04 | SSE 订阅端点：连接建立后立即发送一次完整 `state`；之后每次状态变化发送 `state`；每 15 秒发送 `sync` 心跳 | P0 |
 | SRV-05 | 管理 API（第 9.3 节），需管理口令 | P0 |
 | SRV-06 | 预设增删改查、排序 | P0 |
-| SRV-07 | 状态持久化到 PostgreSQL：每次状态变化写入当前计时（单行）。重启后恢复：running 状态按记录的墙钟结束时间重算剩余；若停机期间已归零，恢复为 `expired`；停机期间跨过的提醒不补发 | P0 |
+| SRV-07 | 状态持久化到 PostgreSQL：每次状态变化写入该房间的计时（每个房间一行）。重启后恢复：running 状态按记录的墙钟结束时间重算剩余；若停机期间已归零，恢复为 `expired`；停机期间跨过的提醒不补发 | P0 |
 | SRV-08 | 所有路由挂在可配置的基础路径下（`MERIDIAN_BASE_PATH`，本项目为 `/meridian`） | P0 |
 | SRV-09 | 内嵌并托管控制台静态资源；基础路径下的 `/` 返回控制台 | P0 |
 | SRV-10 | 健康检查 `GET {base}/healthz`（含数据库连通性）；二进制支持 `meridian-server healthcheck` 子命令，供无 shell 的镜像使用 | P0 |
-| SRV-11 | 统计在线订阅数（区分客户端和控制台，按 `?role=` 参数），管理 API 可查询 | P1 |
+| SRV-11 | 按房间统计在线订阅数（区分客户端和控制台，按 `?role=` 参数），管理 API 可查询 | P1 |
 | SRV-12 | 管理操作支持 `if_seq` 乐观并发：带上时若与当前 `seq` 不符返回 `409 seq_conflict`，避免两个控制台互相覆盖 | P1 |
 | SRV-13 | 操作记录：每次管理操作写一条记录（时间、操作、参数、来源 IP），保留最近 1000 条，可查询 | P1 |
 | SRV-14 | 登录限流：每 IP 每分钟最多 5 次失败尝试 | P1 |
 | SRV-15 | 预设导入 / 导出（JSON） | P2 |
-| SRV-16 | 多频道（多路倒计时） | P2 |
+| SRV-16 | 房间：新建、重命名、删除，最多 100 个。每个房间有自己的计时、`seq` 与持久化，互不影响。删除时结束其计时，向房间里的订阅者发送 `room_deleted` 后断开 | P0 |
+| SRV-17 | 订阅与公开接口用 `?r=<房间 id>` 指定房间；房间不存在时返回 `404 room_not_found`。提供公开的 `GET {base}/api/v1/rooms/{id}`，供客户端加入前确认房间存在 | P0 |
+| SRV-18 | 升级时把 1.0 的唯一计时迁移为一个名为「默认房间」的房间，进行中的一轮不中断 | P0 |
 
 ---
 
@@ -275,12 +278,18 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 
 **登录页**：一个输入框「管理口令」，一个按钮「进入」。口令错误时提示「口令不对」。
 
-**主页**（单页，宽屏左右两栏，窄屏上下堆叠，最窄支持 360px）：
+**房间列表**（登录后的首页）：每个房间一行，显示房间名、剩余时间、状态、标题与在线客户端数，时间实时走动；可「新建房间」「重命名」「删除」「进入」。新建后直接进入该房间。
+
+**房间页**（地址为 `{控制台地址}?r=<房间 id>`，可收藏、可后退；单页，宽屏左右两栏，窄屏上下堆叠，最窄支持 360px）。顶部是「← 全部房间」和房间名，右栏最上方是「客户端地址」与「复制」：
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │ 子午 · 控制台                     ● 已连接   在线 12    退出  │
+├───────────────────────────────────────────────────────────────┤
+│ ← 全部房间   一号厅                                            │
 ├──────────────────────────────────────┬────────────────────────┤
+│                                      │ 客户端地址              │
+│                                      │ [https://…?r=0192…][复制]│
 │  第二场 · 路演                        │ 预设             [新建] │
 │                                      │ ───────────────────────│
 │            12:34                     │ 开场        5:00   开始 │
@@ -320,7 +329,10 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 | CON-14 | 中英文界面，跟随浏览器语言，可手动切换 | P1 |
 | CON-15 | 浅色 / 深色，跟随系统 | P1 |
 | CON-16 | 预设导入导出 | P2 |
-| CON-18 | 多控制台同步：状态经同一 SSE 流实时同步；预设变动经 `presets` 事件同步到所有控制台；同时编辑提醒时后保存者被拒绝并提示载入最新（5.4.1） | P1 |
+| CON-18 | 多控制台同步：同一房间的状态经该房间的 SSE 流实时同步；预设变动经 `presets` 事件同步到所有控制台；同时编辑提醒时后保存者被拒绝并提示载入最新（5.4.1） | P1 |
+| CON-19 | 房间列表：新建（填房间名，可重名）、重命名、删除（需确认：「删除房间「X」？房间里的计时会结束，已连接的客户端会退回输入地址的界面。」）、进入；列表经 `rooms` 事件实时刷新 | P0 |
+| CON-20 | 房间页：所有计时操作只作用于当前房间；显示该房间的「客户端地址」（控制台地址加 `?r=`），可一键复制 | P0 |
+| CON-21 | 当前房间被删除（`room_deleted`，或重连时发现房间已不存在）时回到房间列表并提示「这个房间已被删除」 | P0 |
 | CON-17 | 当前一轮的提醒列表：显示提醒点、内容，已过的标「已过」；running / paused 时可「编辑提醒」，增删改后立即生效（5.4.1） | P0 |
 
 ---
@@ -333,11 +345,12 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 
 | 编号 | 需求 | 优先级 |
 | --- | --- | --- |
-| CLI-01 | 首次启动显示连接页：一个输入框「服务器地址」（占位文字 `https://example/meridian`），一个按钮「连接」 | P0 |
-| CLI-02 | 地址规范化：缺少协议时补 `https://`；去掉末尾 `/`；若用户粘贴了完整的 `/api/v1/stream` 地址也能识别。订阅地址 = `{地址}/api/v1/stream?role=client` | P0 |
-| CLI-03 | 地址保存在本地，之后启动自动连接，不再显示连接页 | P0 |
+| CLI-01 | 首次启动显示连接页：一个输入框「房间地址」（占位文字 `https://example/meridian?r=…`），一个按钮「连接」。地址从控制台房间页的「客户端地址」复制。连接前先请求 `GET {地址}/api/v1/rooms/{id}` 确认房间存在，存在才加入；不存在时提示「这个房间不存在。检查地址，或在控制台复制最新的客户端地址。」 | P0 |
+| CLI-02 | 地址规范化：缺少协议时补 `https://`；去掉末尾 `/`；若用户粘贴了完整的 `/api/v1/stream` 地址也能识别；`?r=` 取房间 id（UUID，大小写不敏感），缺少时提示「地址里缺少房间号。在控制台进入房间，复制那里的客户端地址。」。订阅地址 = `{地址}/api/v1/stream?role=client&r={id}` | P0 |
+| CLI-03 | 地址保存在本地，之后启动自动连接，不再显示连接页。房间被删除（收到 `room_deleted`，或重连时得到 `404 room_not_found`）时停止重连，回到连接页并提示「这个房间已被删除。填写新的房间地址。」；1.0 保存的不带房间的地址同样回到连接页 | P0 |
 | CLI-04 | 断线自动重连，退避 1s → 2s → 4s … 上限 30s；连接中状态见 DESIGN 5.7 | P0 |
 | CLI-05 | 连不上时提示：「连不上这个地址。检查地址是否正确，或服务器是否在运行。」 | P0 |
+| CLI-07 | 设置页「房间」一栏显示房间名（随控制台重命名更新）与房间地址；样式与提醒卡片仍显示倒计时的标题 | P0 |
 | CLI-06 | 延迟补偿：连接后调用 `GET {地址}/api/v1/time` 3 次，取最小往返时间的一半作为单程延迟，从收到的剩余时间中扣除 | P1 |
 
 ### 8.2 走时与同步
@@ -407,19 +420,26 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 
 ### 8.8 本地设置项
 
-存于 `shared_preferences`：服务器地址、样式、各样式的贴边位置与尺寸、显示器、边距、窗口置顶、鼠标穿透、不透明度、外观、语言、开机启动、自由摆放时的位置。
+存于 `shared_preferences`：房间地址（含 `?r=`）、房间名、样式、各样式的贴边位置与尺寸、显示器、边距、窗口置顶、鼠标穿透、不透明度、外观、语言、开机启动、自由摆放时的位置。
 
 ---
 
 ## 9. 接口与协议
 
-基础路径 `{base}` = `/meridian`。完整地址示例：`https://example/meridian/api/v1/stream`。
+基础路径 `{base}` = `/meridian`。完整地址示例：`https://example/meridian/api/v1/stream?r=0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506`。
+
+房间 id 是小写的 UUIDv7（接口接受大写）。
 
 所有时间量以毫秒整数表示，字段以 `_ms` 结尾；时间点为 Unix 毫秒。
 
 ### 9.1 SSE：`GET {base}/api/v1/stream`
 
-查询参数：`role=client|console`（用于在线统计，以及只发给控制台的 `presets` 事件；默认 `client`）。
+查询参数：
+
+- `r`：房间 id，必填。缺少时 `400 room_required`，房间不存在时 `404 room_not_found`（都在开始推送之前返回 JSON 错误）。
+- `role=client|console`：用于在线统计，以及只发给控制台的 `presets` 事件；默认 `client`。
+
+`role=console` 且不带 `r` 时订阅的是**房间列表**：不发 `state`，只发 `rooms` 与 `presets`，心跳为注释行 `: ping`。
 
 响应头：
 
@@ -430,7 +450,23 @@ Connection: keep-alive
 X-Accel-Buffering: no
 ```
 
-连接建立时先发送 `retry: 2000`，随后立即发送一次 `state`。
+连接建立时先发送 `retry: 2000`，随后立即发送一次 `room` 和一次 `state`。
+
+**`room`**：房间信息，连接时发送一次，重命名时再发送。不带 `id`。
+
+```
+event: room
+data: {"id":"0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506","name":"一号厅","created_at":"2026-10-18T10:00:00Z"}
+```
+
+**`room_deleted`**：房间被删除。随后服务端断开连接；客户端不再重连。
+
+```
+event: room_deleted
+data: {"id":"0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506"}
+```
+
+**`rooms`**：只发给房间列表的订阅者。房间有新建、重命名、删除，或任一房间状态变化时发送，数据为 `{}`；控制台收到后重新拉取列表。
 
 **`state`**：状态完整快照，每次变化发送。
 
@@ -478,7 +514,8 @@ data: {"seq":42,"status":"running","remaining_ms":740118,"overtime_ms":0,"server
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `{base}/api/v1/state` | 返回与 `state` 事件相同的 JSON |
+| GET | `{base}/api/v1/rooms/{id}` | `{"id":"…","name":"一号厅"}`；不存在时 `404 room_not_found`。客户端加入前用它确认房间存在 |
+| GET | `{base}/api/v1/state?r={id}` | 返回该房间与 `state` 事件相同的 JSON |
 | GET | `{base}/api/v1/time` | `{"server_time":1792224000123}`，用于延迟测量 |
 | GET | `{base}/healthz` | `200 {"status":"ok"}`；数据库不可用时 `503` |
 
@@ -491,22 +528,40 @@ data: {"seq":42,"status":"running","remaining_ms":740118,"overtime_ms":0,"server
 | POST | `/admin/login` | `{"token":"…"}` | 成功设置 Cookie（Path=`{base}`），`204` |
 | POST | `/admin/logout` | — | 清除 Cookie |
 | GET | `/admin/session` | — | `200` 已登录 / `401` |
-| POST | `/admin/timer/start` | `{"preset_id":"…"}` 或 `{"total_ms":900000,"title":"…","on_expire":"stop","reminders":[…]}`；可加 `"if_seq"` | 开始新一轮 |
-| POST | `/admin/timer/pause` | `{"if_seq":42}`（可选） | |
-| POST | `/admin/timer/resume` | 同上 | |
-| POST | `/admin/timer/end` | 同上 | |
-| POST | `/admin/timer/extend` | `{"delta_ms":300000,"mode":"remaining"\|"total","if_seq":42}` | |
-| POST | `/admin/timer/reduce` | 同上，`delta_ms` 为要减少的量（正数） | 见 5.4 |
-| PUT | `/admin/timer/reminders` | `{"reminders":[…],"if_reminders_seq":40}` | 替换当前一轮的提醒，见 5.4.1；`if_reminders_seq` 与当前 `reminders_seq` 不符时返回 `409 reminders_conflict` |
+| GET | `/admin/rooms` | — | Room 列表，按创建时间 |
+| POST | `/admin/rooms` | `{"name":"一号厅"}` | 新建，`201` + Room |
+| GET | `/admin/rooms/{id}` | — | Room |
+| PUT | `/admin/rooms/{id}` | `{"name":"…"}` | 重命名 |
+| DELETE | `/admin/rooms/{id}` | — | 删除，`204` |
+| POST | `/admin/rooms/{id}/timer/start` | `{"preset_id":"…"}` 或 `{"total_ms":900000,"title":"…","on_expire":"stop","reminders":[…]}`；可加 `"if_seq"` | 开始新一轮 |
+| POST | `/admin/rooms/{id}/timer/pause` | `{"if_seq":42}`（可选） | |
+| POST | `/admin/rooms/{id}/timer/resume` | 同上 | |
+| POST | `/admin/rooms/{id}/timer/end` | 同上 | |
+| POST | `/admin/rooms/{id}/timer/extend` | `{"delta_ms":300000,"mode":"remaining"\|"total","if_seq":42}` | |
+| POST | `/admin/rooms/{id}/timer/reduce` | 同上，`delta_ms` 为要减少的量（正数） | 见 5.4 |
+| PUT | `/admin/rooms/{id}/timer/reminders` | `{"reminders":[…],"if_reminders_seq":40}` | 替换当前一轮的提醒，见 5.4.1；`if_reminders_seq` 与当前 `reminders_seq` 不符时返回 `409 reminders_conflict` |
 | GET | `/admin/presets` | — | 按排序返回 |
 | POST | `/admin/presets` | Preset（无 id） | 新建 |
 | PUT | `/admin/presets/{id}` | Preset | 修改 |
 | DELETE | `/admin/presets/{id}` | — | 删除 |
 | PUT | `/admin/presets/order` | `{"ids":["…","…"]}` | 排序 |
-| GET | `/admin/clients` | — | `{"client":12,"console":1}` |
-| GET | `/admin/logs?limit=100` | — | 操作记录 |
+| GET | `/admin/logs?limit=100` | — | 操作记录，房间操作带 `room_id` 与当前的 `room_name`（房间已删除时为空） |
 
-计时类操作成功时返回 `200` + 最新 `state`。
+计时类操作成功时返回 `200` + 该房间最新的 `state`。
+
+**Room**
+
+```json
+{
+  "id": "0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506",
+  "name": "一号厅",
+  "created_at": "2026-10-18T10:00:00Z",
+  "clients": 12,
+  "state": {"seq": 42, "status": "running", "title": "第二场 · 路演", "…": "…"}
+}
+```
+
+`clients` 是房间里在线的客户端数，`state` 与 `state` 事件相同。房间名 1 到 40 字，可以重复。
 
 **Preset**
 
@@ -532,9 +587,11 @@ data: {"seq":42,"status":"running","remaining_ms":740118,"overtime_ms":0,"server
 
 | HTTP | code | 场景 |
 | --- | --- | --- |
-| 400 | `bad_request` | 参数缺失、越界、违反 5.6 约束 |
+| 400 | `bad_request` | 参数缺失、越界、违反 5.6 约束、房间名为空或超长、房间超过 100 个 |
+| 400 | `room_required` | 订阅或 `state` 没有带 `?r=` |
 | 401 | `unauthorized` | 未登录或口令错误 |
 | 404 | `not_found` | 预设不存在 |
+| 404 | `room_not_found` | 房间不存在或已删除 |
 | 409 | `invalid_state` | 当前状态不允许该操作 |
 | 409 | `seq_conflict` | `if_seq` 不匹配 |
 | 429 | `too_many_attempts` | 登录限流 |
@@ -558,9 +615,17 @@ CREATE TABLE presets (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 当前计时（只有一行，id 固定为 1；为多频道预留可改为 channel 主键）
-CREATE TABLE timer_state (
-  id            INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+-- 房间
+CREATE TABLE rooms (
+  id          UUID PRIMARY KEY,              -- UUIDv7，由服务端生成
+  name        TEXT NOT NULL,                 -- 可以重复
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 每个房间当前的计时（每个房间一行，随房间删除）
+CREATE TABLE room_timers (
+  room_id       UUID PRIMARY KEY REFERENCES rooms (id) ON DELETE CASCADE,
   seq           BIGINT NOT NULL,
   run_id        TEXT,
   status        TEXT NOT NULL,
@@ -582,7 +647,8 @@ CREATE TABLE op_logs (
   action     TEXT NOT NULL,
   params     JSONB NOT NULL DEFAULT '{}',
   seq_after  BIGINT,
-  remote_ip  TEXT
+  remote_ip  TEXT,
+  room_id    UUID              -- 房间操作所属的房间；房间删除后保留
 );
 
 -- 迁移版本
@@ -591,7 +657,8 @@ CREATE TABLE schema_migrations (version INT PRIMARY KEY, applied_at TIMESTAMPTZ 
 
 - 运行时以内存为准，数据库是持久层：状态变化先改内存、广播，再异步写库（写库失败记日志并重试，不阻塞广播）。
 - 墙钟字段只用于重启恢复，运行时计算一律用单调时钟。
-- ID：带前缀的随机串（`p_` 预设、`r_` 一轮、`m_` 提醒）。
+- ID：房间为 UUIDv7；其余为带前缀的随机串（`p_` 预设、`r_` 一轮、`m_` 提醒）。
+- 迁移 `0002_rooms` 把 1.0 的 `timer_state` 单行移入一个名为「默认房间」的房间，然后删除 `timer_state`。
 
 ---
 
@@ -678,6 +745,10 @@ location ^~ /meridian/ {
 | 服务器系统时间被校正 | 运行时用单调时钟，不受影响；只影响重启恢复 |
 | 客户端系统时间被修改 | 客户端只用单调时钟，不受影响 |
 | 客户端休眠后唤醒 | 检测到长间隔，立即重连同步（CLI-15） |
+| 房间被删除时客户端在线 | 收到 `room_deleted`，停止重连，回到连接页 |
+| 客户端离线期间房间被删除 | 重连得到 `404 room_not_found`，同上 |
+| 控制台停在已删除的房间 | 回到房间列表并提示；直接打开已删除房间的地址也一样 |
+| 1.0 客户端或 1.0 保存的地址（不带 `?r=`） | 服务端返回 `400 room_required`；新客户端回到连接页提示缺少房间号 |
 | 两个控制台同时操作 | `if_seq` 冲突返回 409，后操作者刷新后重试 |
 | 延长后剩余超过总时长 | 总时长自动抬高到剩余（5.4） |
 | 延长后剩余高于已触发的提醒点 | 该提醒重新待触发 |
@@ -723,9 +794,10 @@ location ^~ /meridian/ {
 | D-2 | 控制台用 Vue 3 网页，内嵌在服务端二进制中 | 见 3.2；一个镜像同时提供 API 与控制台 |
 | D-3 | 数据库用 PostgreSQL，随 compose 部署独立实例 | 需求指定；独立实例与宿主机其他服务互不影响 |
 | D-4 | 提醒由服务端触发并广播，客户端不自行判断 | 所有窗口同时弹出；断线客户端不会误弹过时的提醒 |
-| D-5 | 1.0 只有一个倒计时；接口与表结构为多频道预留（以后路径为 `/api/v1/channels/{id}/stream`） | 需求只要一个；不为假想需求增加复杂度 |
+| D-5 | 1.0 只有一个倒计时；1.1 起改为多房间，见 D-11 | 1.0 时需求只要一个；不为假想需求增加复杂度 |
 | D-6 | 订阅端不鉴权，管理端用单一口令 | 需求明确订阅无需认证；倒计时信息不敏感 |
 | D-7 | 到时后默认停在 `00:00`，超时计数由预设开启 | 多数场景只需知道「到了」；演讲类场景可选 |
 | D-8 | 客户端设置面板、提醒卡片都在主窗口内绘制，不开第二个原生窗口 | Flutter Windows 多窗口支持不成熟；单窗口改尺寸更可靠 |
 | D-9 | 客户端的窗口定位、置顶、鼠标穿透、不透明度走 runner 内自写的 `meridian/window` 原生通道，不用 `window_manager` 的对应接口 | `window_manager` 置顶时调用 `SetWindowPos` 不带 `SWP_NOACTIVATE`，每 5 秒的置顶守护会把焦点从演示软件抢走；按物理像素定位也避免了混合 DPI 下的换算误差 |
 | D-10 | 托盘使用 `tray_manager` 0.5.x | 0.8 是基于 nativeapi 的重写版，尚不成熟 |
+| D-11 | 多房间：房间 id 用 UUIDv7，放在查询参数 `?r=` 里；房间名可以重复；预设所有房间共用；订阅仍不鉴权 | 客户端地址就是控制台里复制来的那一串，不用另填房间号；UUIDv7 按时间排序且难以猜到，知道地址即可加入，与 D-6 一致；房间名只为辨认，不必唯一 |

@@ -46,8 +46,10 @@ curl http://127.0.0.1:8090/meridian/healthz   # {"status":"ok"}
 
 ## 4. 使用
 
-- 控制台：`https://<你的域名>/meridian/`，用 `MERIDIAN_ADMIN_TOKEN` 登录。
-- 客户端里填写的服务器地址：`https://<你的域名>/meridian`。
+- 控制台：`https://<你的域名>/meridian/`，用 `MERIDIAN_ADMIN_TOKEN` 登录，新建一个房间。
+- 客户端里填写的房间地址：在控制台的房间页复制「客户端地址」，形如 `https://<你的域名>/meridian/?r=<房间 id>`。
+
+从 1.0 升级时，原来的倒计时会变成一个名为「默认房间」的房间，进行中的一轮不受影响；1.0 客户端需要升级，并改填带 `?r=` 的房间地址。
 
 ## 升级
 
