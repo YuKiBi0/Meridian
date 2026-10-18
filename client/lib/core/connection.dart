@@ -1,4 +1,4 @@
-/// Keeps one SSE subscription to the server alive (PRD §8.1).
+/// Keeps one SSE subscription to a room alive (PRD §8.1).
 library;
 
 import 'dart:async';
@@ -13,6 +13,11 @@ import 'display.dart';
 import 'protocol.dart';
 import 'sse.dart';
 
+/// Thrown by [ServerConnection.lookUpRoom] when the server has no such room.
+class RoomNotFound implements Exception {
+  const RoomNotFound();
+}
+
 class ServerConnection extends ChangeNotifier {
   ServerConnection(this.countdown, {http.Client Function()? clientFactory})
       : _newClient = clientFactory ?? http.Client.new;
@@ -26,7 +31,7 @@ class ServerConnection extends ChangeNotifier {
   final http.Client Function() _newClient;
   final _reminders = StreamController<ReminderEvent>.broadcast();
 
-  Uri? _base;
+  RoomAddress? _address;
   http.Client? _client;
   StreamSubscription<SseEvent>? _sub;
   Timer? _retryTimer;
@@ -37,9 +42,17 @@ class ServerConnection extends ChangeNotifier {
   Link _link = Link.disconnected;
   bool _everConnected = false;
   String? _lastError;
+  String? _roomName;
+  bool _roomGone = false;
 
-  Uri? get base => _base;
+  RoomAddress? get address => _address;
   Link get link => _link;
+
+  /// The room's name as last announced by the server.
+  String? get roomName => _roomName;
+
+  /// Set when the room was deleted; the connection has stopped for good.
+  bool get roomGone => _roomGone;
 
   /// Whether a state has been received since [connect] was last called with
   /// a new address.
@@ -50,13 +63,42 @@ class ServerConnection extends ChangeNotifier {
 
   Stream<ReminderEvent> get reminders => _reminders.stream;
 
-  /// Starts (or restarts) the subscription to [base].
-  void connect(Uri base) {
-    if (_base != base) {
+  /// Checks that the room exists before joining it (PRD CLI-01) and returns
+  /// its name. Throws [RoomNotFound], or another error when the server
+  /// cannot be reached.
+  Future<String> lookUpRoom(RoomAddress a) async {
+    final client = _newClient();
+    try {
+      final r = await client.get(roomUri(a)).timeout(_connectTimeout);
+      // The server sends UTF-8; don't rely on a proxy keeping the charset.
+      final body = utf8.decode(r.bodyBytes, allowMalformed: true);
+      if (r.statusCode == 404 && _isRoomNotFound(body)) throw const RoomNotFound();
+      if (r.statusCode != 200) throw StateError('HTTP ${r.statusCode}');
+      return ((jsonDecode(body) as Map<String, Object?>)['name'] as String?) ?? '';
+    } finally {
+      client.close();
+    }
+  }
+
+  static bool _isRoomNotFound(String body) {
+    try {
+      final err = (jsonDecode(body) as Map<String, Object?>)['error'] as Map<String, Object?>?;
+      return err?['code'] == 'room_not_found';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Starts (or restarts) the subscription to the room at [a]. [roomName]
+  /// is shown until the server announces the current one.
+  void connect(RoomAddress a, {String? roomName}) {
+    if (_address != a) {
       _everConnected = false;
       countdown.reset();
+      _roomName = roomName;
     }
-    _base = base;
+    _address = a;
+    _roomGone = false;
     _backoff = const Duration(seconds: 1);
     _restart();
   }
@@ -64,15 +106,26 @@ class ServerConnection extends ChangeNotifier {
   /// Drops the current stream and connects again right away, e.g. after
   /// the PC wakes from sleep.
   void reconnect() {
-    if (_base != null) _restart();
+    if (_address != null) _restart();
   }
 
   void disconnect() {
-    _base = null;
+    _address = null;
     _stop();
     _everConnected = false;
     countdown.reset();
     _setLink(Link.disconnected);
+  }
+
+  /// The room was deleted: stop for good and let the app ask for a new one.
+  void _gone() {
+    _address = null;
+    _stop();
+    _everConnected = false;
+    _roomGone = true;
+    countdown.reset();
+    _link = Link.disconnected;
+    notifyListeners();
   }
 
   void _stop() {
@@ -100,27 +153,32 @@ class ServerConnection extends ChangeNotifier {
   void _restart() {
     _stop();
     final gen = _generation;
-    final base = _base!;
+    final a = _address!;
     _setLink(Link.connecting);
-    _open(base, gen);
+    _open(a, gen);
   }
 
-  Future<void> _open(Uri base, int gen) async {
+  Future<void> _open(RoomAddress a, int gen) async {
     final client = _newClient();
     _client = client;
     try {
-      final req = http.Request('GET', streamUri(base))
+      final req = http.Request('GET', streamUri(a))
         ..headers['Accept'] = 'text/event-stream'
         ..headers['Cache-Control'] = 'no-cache';
       final resp = await client.send(req).timeout(_connectTimeout);
       if (gen != _generation) return;
+      // Deleted while we were away (or while the server was down).
+      if (resp.statusCode == 404 && _isRoomNotFound(await resp.stream.bytesToString())) {
+        if (gen == _generation) _gone();
+        return;
+      }
       final type = resp.headers['content-type'] ?? '';
       if (resp.statusCode != 200 || !type.startsWith('text/event-stream')) {
         throw StateError('HTTP ${resp.statusCode}');
       }
       _backoff = const Duration(seconds: 1);
       _lastError = null;
-      _measureLatency(base, gen);
+      _measureLatency(a.base, gen);
       _kick(gen);
       _sub = resp.stream.transform(const SseDecoder()).listen(
             (e) => _onEvent(e, gen),
@@ -153,6 +211,14 @@ class ServerConnection extends ChangeNotifier {
           countdown.sync(SyncEvent.fromJson(jsonDecode(e.data) as Map<String, Object?>));
         case 'reminder':
           _reminders.add(ReminderEvent.fromJson(jsonDecode(e.data) as Map<String, Object?>));
+        case 'room':
+          final name = (jsonDecode(e.data) as Map<String, Object?>)['name'] as String?;
+          if (name != null && name != _roomName) {
+            _roomName = name;
+            notifyListeners();
+          }
+        case 'room_deleted':
+          _gone();
       }
     } on FormatException {
       // Ignore a malformed event rather than dropping the stream.
@@ -160,7 +226,7 @@ class ServerConnection extends ChangeNotifier {
   }
 
   void _fail(int gen, Object error) {
-    if (gen != _generation || _base == null) return;
+    if (gen != _generation || _address == null) return;
     _stop();
     _lastError = error.toString();
     _setLink(_everConnected ? Link.connecting : Link.disconnected);
@@ -169,7 +235,7 @@ class ServerConnection extends ChangeNotifier {
     _backoff = _backoff * 2 > _maxBackoff ? _maxBackoff : _backoff * 2;
     final next = _generation;
     _retryTimer = Timer(delay, () {
-      if (next == _generation && _base != null) _restart();
+      if (next == _generation && _address != null) _restart();
     });
   }
 

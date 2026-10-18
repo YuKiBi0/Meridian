@@ -1,7 +1,9 @@
-// Live countdown state: subscribes to the SSE stream and extrapolates the
-// remaining time locally between events, like the desktop client does.
+// Live countdown state: subscribes to the SSE stream of one room (or to the
+// room list) and extrapolates the remaining time locally between events,
+// like the desktop client does.
 import { computed, reactive, ref } from 'vue'
-import type { SyncEvent, TimerState } from './types'
+import { ApiError, roomApi } from './api'
+import type { RoomInfo, SyncEvent, TimerState } from './types'
 
 export type Connection = 'connected' | 'connecting' | 'disconnected'
 
@@ -16,19 +18,35 @@ const now = ref(performance.now())
 /** Run id that was ended in the last few seconds, to show "Ended". */
 export const recentlyEnded = ref(false)
 
+/** The room the stream is in, as last announced by the server. */
+export const room = ref<RoomInfo | null>(null)
+
 let source: EventSource | null = null
+let roomId: string | null = null
 let everOpened = false
 const presetListeners = new Set<() => void>()
+const roomsListeners = new Set<() => void>()
+const goneListeners = new Set<() => void>()
+
+function listen(set: Set<() => void>, fn: () => void): () => void {
+  set.add(fn)
+  return () => set.delete(fn)
+}
 
 /**
  * Calls fn whenever another console (or this one) changes the presets, and
  * after a reconnect, since events sent while offline are lost.
  */
-export function onPresetsChanged(fn: () => void): () => void {
-  presetListeners.add(fn)
-  return () => presetListeners.delete(fn)
-}
+export const onPresetsChanged = (fn: () => void) => listen(presetListeners, fn)
+
+/** Calls fn when the room list changes (room list stream only), and after a reconnect. */
+export const onRoomsChanged = (fn: () => void) => listen(roomsListeners, fn)
+
+/** Calls fn when the current room is deleted. The stream is closed by then. */
+export const onRoomGone = (fn: () => void) => listen(goneListeners, fn)
+
 let retry = 1000
+let retryTimer: number | undefined
 let endedTimer: number | undefined
 
 function accept(state: TimerState) {
@@ -44,19 +62,56 @@ function accept(state: TimerState) {
   anchor.value = { state, at: performance.now() }
 }
 
-export function connect() {
+/**
+ * Subscribes to the room's stream, or to the room list when id is null.
+ * Replaces any previous subscription.
+ */
+export function connect(id: string | null) {
+  if (id !== roomId) {
+    anchor.value = null
+    room.value = null
+    recentlyEnded.value = false
+    everOpened = false
+    retry = 1000
+  }
+  roomId = id
+  open()
+}
+
+export function disconnect() {
+  clearTimeout(retryTimer)
+  source?.close()
+  source = null
+  roomId = null
+}
+
+function gone() {
+  disconnect()
+  goneListeners.forEach((fn) => fn())
+}
+
+function open() {
+  clearTimeout(retryTimer)
   source?.close()
   connection.value = 'connecting'
-  source = new EventSource('api/v1/stream?role=console')
-  source.onopen = () => {
+  const id = roomId
+  const es = new EventSource(`api/v1/stream?role=console${id ? `&r=${encodeURIComponent(id)}` : ''}`)
+  source = es
+  es.onopen = () => {
     connection.value = 'connected'
     retry = 1000
-    if (everOpened) presetListeners.forEach((fn) => fn())
+    if (everOpened) {
+      presetListeners.forEach((fn) => fn())
+      roomsListeners.forEach((fn) => fn())
+    }
     everOpened = true
   }
-  source.addEventListener('presets', () => presetListeners.forEach((fn) => fn()))
-  source.addEventListener('state', (e) => accept(JSON.parse((e as MessageEvent).data)))
-  source.addEventListener('sync', (e) => {
+  es.addEventListener('presets', () => presetListeners.forEach((fn) => fn()))
+  es.addEventListener('rooms', () => roomsListeners.forEach((fn) => fn()))
+  es.addEventListener('room', (e) => (room.value = JSON.parse((e as MessageEvent).data)))
+  es.addEventListener('room_deleted', gone)
+  es.addEventListener('state', (e) => accept(JSON.parse((e as MessageEvent).data)))
+  es.addEventListener('sync', (e) => {
     const s: SyncEvent = JSON.parse((e as MessageEvent).data)
     const a = anchor.value
     if (!a || s.seq !== a.state.seq) return
@@ -64,14 +119,24 @@ export function connect() {
       accept({ ...a.state, remaining_ms: s.remaining_ms, overtime_ms: s.overtime_ms, server_time: s.server_time })
     }
   })
-  source.onerror = () => {
-    if (source?.readyState === EventSource.CLOSED) {
-      connection.value = 'disconnected'
-      setTimeout(connect, retry)
-      retry = Math.min(retry * 2, 30_000)
-    } else {
+  es.onerror = async () => {
+    if (es !== source) return
+    if (es.readyState !== EventSource.CLOSED) {
       connection.value = 'connecting'
+      return
     }
+    connection.value = 'disconnected'
+    // The server refuses the stream of a room deleted while we were away.
+    if (id) {
+      try {
+        await roomApi(id).get()
+      } catch (e) {
+        if ((e as ApiError).code === 'room_not_found' && es === source) return gone()
+      }
+    }
+    if (es !== source) return
+    retryTimer = window.setTimeout(open, retry)
+    retry = Math.min(retry * 2, 30_000)
   }
 }
 

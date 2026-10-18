@@ -77,3 +77,4 @@ flutter test integration_test -d windows   # 只能在 Windows 上运行：驱�
 - 每个功能从 `develop` 开 `feature/*` 分支，通过 PR 合回 `develop`。
 - 发布时把 `develop` 合到 `main`，打 `v*` 标签；`client-windows` 流水线会构建 Windows 包并附到 GitHub Release。
 - 版本代号按二十四节气顺序排列，见 [DESIGN](DESIGN.md) 4.3。
+- 完整的发版步骤与 `scripts/release.sh` 用法见 [发版](RELEASING.md)。

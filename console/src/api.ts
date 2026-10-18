@@ -1,6 +1,6 @@
 // Admin REST client. URLs are relative to the page, so the console works
 // under any base path.
-import type { ExtendMode, LogEntry, Preset, Reminder, TimerConfig, TimerState } from './types'
+import type { ExtendMode, LogEntry, Preset, Reminder, RoomSummary, TimerConfig, TimerState } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -40,17 +40,8 @@ export const api = {
   login: (token: string) => request<void>('POST', `${admin}/login`, { token }),
   logout: () => request<void>('POST', `${admin}/logout`),
 
-  start: (body: Partial<TimerConfig> & { preset_id?: string; if_seq?: number }) =>
-    request<TimerState>('POST', `${admin}/timer/start`, body),
-  pause: (if_seq?: number) => request<TimerState>('POST', `${admin}/timer/pause`, { if_seq }),
-  resume: (if_seq?: number) => request<TimerState>('POST', `${admin}/timer/resume`, { if_seq }),
-  end: (if_seq?: number) => request<TimerState>('POST', `${admin}/timer/end`, { if_seq }),
-  extend: (delta_ms: number, mode: ExtendMode, if_seq?: number) =>
-    request<TimerState>('POST', `${admin}/timer/extend`, { delta_ms, mode, if_seq }),
-  reduce: (delta_ms: number, mode: ExtendMode, if_seq?: number) =>
-    request<TimerState>('POST', `${admin}/timer/reduce`, { delta_ms, mode, if_seq }),
-  setReminders: (reminders: Reminder[], if_reminders_seq?: number) =>
-    request<TimerState>('PUT', `${admin}/timer/reminders`, { reminders, if_reminders_seq }),
+  rooms: () => request<RoomSummary[]>('GET', `${admin}/rooms`),
+  createRoom: (name: string) => request<RoomSummary>('POST', `${admin}/rooms`, { name }),
 
   presets: () => request<Preset[]>('GET', `${admin}/presets`),
   createPreset: (p: Omit<Preset, 'id'>) => request<Preset>('POST', `${admin}/presets`, p),
@@ -58,6 +49,30 @@ export const api = {
   deletePreset: (id: string) => request<void>('DELETE', `${admin}/presets/${encodeURIComponent(id)}`),
   reorderPresets: (ids: string[]) => request<void>('PUT', `${admin}/presets/order`, { ids }),
 
-  clients: () => request<{ client: number; console: number }>('GET', `${admin}/clients`),
   logs: (limit = 100) => request<LogEntry[]>('GET', `${admin}/logs?limit=${limit}`),
 }
+
+/** Calls scoped to one room. */
+export function roomApi(id: string) {
+  const room = `${admin}/rooms/${encodeURIComponent(id)}`
+  const timer = `${room}/timer`
+  return {
+    get: () => request<RoomSummary>('GET', room),
+    rename: (name: string) => request<RoomSummary>('PUT', room, { name }),
+    remove: () => request<void>('DELETE', room),
+
+    start: (body: Partial<TimerConfig> & { preset_id?: string; if_seq?: number }) =>
+      request<TimerState>('POST', `${timer}/start`, body),
+    pause: (if_seq?: number) => request<TimerState>('POST', `${timer}/pause`, { if_seq }),
+    resume: (if_seq?: number) => request<TimerState>('POST', `${timer}/resume`, { if_seq }),
+    end: (if_seq?: number) => request<TimerState>('POST', `${timer}/end`, { if_seq }),
+    extend: (delta_ms: number, mode: ExtendMode, if_seq?: number) =>
+      request<TimerState>('POST', `${timer}/extend`, { delta_ms, mode, if_seq }),
+    reduce: (delta_ms: number, mode: ExtendMode, if_seq?: number) =>
+      request<TimerState>('POST', `${timer}/reduce`, { delta_ms, mode, if_seq }),
+    setReminders: (reminders: Reminder[], if_reminders_seq?: number) =>
+      request<TimerState>('PUT', `${timer}/reminders`, { reminders, if_reminders_seq }),
+  }
+}
+
+export type RoomApi = ReturnType<typeof roomApi>

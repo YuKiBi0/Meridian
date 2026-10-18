@@ -43,6 +43,16 @@ class ToastController extends ChangeNotifier {
     if (items.remove(item)) notifyListeners();
   }
 
+  /// Drops every card, e.g. when leaving a deleted room.
+  void clear() {
+    if (items.isEmpty) return;
+    for (final i in items) {
+      i.timer?.cancel();
+    }
+    items.clear();
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     for (final i in items) {

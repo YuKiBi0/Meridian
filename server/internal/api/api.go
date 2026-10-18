@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/YuKiBi0/Meridian/server/internal/rooms"
 	"github.com/YuKiBi0/Meridian/server/internal/store"
 	"github.com/YuKiBi0/Meridian/server/internal/stream"
 	"github.com/YuKiBi0/Meridian/server/internal/timer"
@@ -33,22 +34,22 @@ type Config struct {
 }
 
 type Server struct {
-	cfg    Config
-	engine *timer.Engine
-	hub    *stream.Hub
-	store  *store.Store
-	auth   *auth
-	limit  *limiter
+	cfg   Config
+	rooms *rooms.Manager
+	hub   *stream.Hub
+	store *store.Store
+	auth  *auth
+	limit *limiter
 }
 
-func New(cfg Config, e *timer.Engine, h *stream.Hub, s *store.Store) *Server {
+func New(cfg Config, rm *rooms.Manager, h *stream.Hub, s *store.Store) *Server {
 	return &Server{
-		cfg:    cfg,
-		engine: e,
-		hub:    h,
-		store:  s,
-		auth:   newAuth(cfg.AdminToken, cfg.CookieSecure, cfg.BasePath+"/"),
-		limit:  newLimiter(),
+		cfg:   cfg,
+		rooms: rm,
+		hub:   h,
+		store: s,
+		auth:  newAuth(cfg.AdminToken, cfg.CookieSecure, cfg.BasePath+"/"),
+		limit: newLimiter(),
 	}
 }
 
@@ -59,24 +60,32 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/stream", s.stream)
 	mux.HandleFunc("GET /api/v1/state", s.state)
 	mux.HandleFunc("GET /api/v1/time", s.time)
+	mux.HandleFunc("GET /api/v1/rooms/{room}", s.inRoom(s.publicRoom))
 
 	mux.HandleFunc("POST /api/v1/admin/login", s.login)
 	mux.HandleFunc("POST /api/v1/admin/logout", s.logout)
 	admin := func(pattern string, h http.HandlerFunc) { mux.Handle(pattern, s.requireAdmin(h)) }
 	admin("GET /api/v1/admin/session", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	admin("POST /api/v1/admin/timer/start", s.start)
-	admin("POST /api/v1/admin/timer/pause", s.simpleOp("pause", s.engine.Pause))
-	admin("POST /api/v1/admin/timer/resume", s.simpleOp("resume", s.engine.Resume))
-	admin("POST /api/v1/admin/timer/end", s.simpleOp("end", s.engine.End))
-	admin("POST /api/v1/admin/timer/extend", s.extend)
-	admin("POST /api/v1/admin/timer/reduce", s.reduce)
-	admin("PUT /api/v1/admin/timer/reminders", s.setReminders)
+	admin("GET /api/v1/admin/rooms", s.listRooms)
+	admin("POST /api/v1/admin/rooms", s.createRoom)
+	admin("GET /api/v1/admin/rooms/{room}", s.inRoom(s.getRoom))
+	admin("PUT /api/v1/admin/rooms/{room}", s.inRoom(s.renameRoom))
+	admin("DELETE /api/v1/admin/rooms/{room}", s.inRoom(s.deleteRoom))
+	timerOp := func(method, op string, h roomHandler) {
+		admin(method+" /api/v1/admin/rooms/{room}/timer/"+op, s.inRoom(h))
+	}
+	timerOp("POST", "start", s.start)
+	timerOp("POST", "pause", s.simpleOp("pause", (*timer.Engine).Pause))
+	timerOp("POST", "resume", s.simpleOp("resume", (*timer.Engine).Resume))
+	timerOp("POST", "end", s.simpleOp("end", (*timer.Engine).End))
+	timerOp("POST", "extend", s.adjust("extend", (*timer.Engine).Extend))
+	timerOp("POST", "reduce", s.adjust("reduce", (*timer.Engine).Reduce))
+	timerOp("PUT", "reminders", s.setReminders)
 	admin("GET /api/v1/admin/presets", s.listPresets)
 	admin("POST /api/v1/admin/presets", s.createPreset)
 	admin("PUT /api/v1/admin/presets/order", s.reorderPresets)
 	admin("PUT /api/v1/admin/presets/{id}", s.updatePreset)
 	admin("DELETE /api/v1/admin/presets/{id}", s.deletePreset)
-	admin("GET /api/v1/admin/clients", s.clients)
 	admin("GET /api/v1/admin/logs", s.logs)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not_found", "没有这个接口")
@@ -134,6 +143,10 @@ func (s *Server) opError(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusConflict, "reminders_conflict", "提醒已被其他控制台改动")
 	case errors.Is(err, timer.ErrSeqConflict):
 		writeErr(w, http.StatusConflict, "seq_conflict", "状态已被其他控制台改动")
+	case errors.Is(err, rooms.ErrNotFound):
+		writeErr(w, http.StatusNotFound, "room_not_found", "房间不存在")
+	case errors.Is(err, rooms.ErrTooMany):
+		writeErr(w, http.StatusBadRequest, "bad_request", "房间最多 100 个")
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not_found", "预设不存在")
 	case errors.Is(err, store.ErrTooMany):
@@ -145,12 +158,13 @@ func (s *Server) opError(w http.ResponseWriter, err error) {
 }
 
 // record writes an operation log entry without delaying the response.
-func (s *Server) record(r *http.Request, action string, params any, seq *int64) {
+// room is "" for operations outside a room.
+func (s *Server) record(r *http.Request, room, action string, params any, seq *int64) {
 	ip := clientIP(r, s.cfg.Trusted)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := s.store.AddLog(ctx, action, params, seq, ip); err != nil {
+		if err := s.store.AddLog(ctx, room, action, params, seq, ip); err != nil {
 			slog.Warn("write op log", "err", err)
 		}
 	}()
@@ -190,29 +204,72 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// roomFromQuery resolves ?r= for the public state and stream endpoints.
+func (s *Server) roomFromQuery(w http.ResponseWriter, r *http.Request) (rooms.Info, *timer.Engine, bool) {
+	q := r.URL.Query().Get("r")
+	if q == "" {
+		writeErr(w, http.StatusBadRequest, "room_required", "地址里缺少房间号 ?r=")
+		return rooms.Info{}, nil, false
+	}
+	id, ok := rooms.ParseID(q)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "room_not_found", "房间不存在")
+		return rooms.Info{}, nil, false
+	}
+	info, e, ok := s.rooms.Get(id)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "room_not_found", "房间不存在")
+	}
+	return info, e, ok
+}
+
 func (s *Server) state(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.engine.Snapshot())
+	if _, e, ok := s.roomFromQuery(w, r); ok {
+		writeJSON(w, http.StatusOK, e.Snapshot())
+	}
 }
 
 func (s *Server) time(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]int64{"server_time": time.Now().UnixMilli()})
 }
 
+// stream serves one room's events (PRD §9.1). A console without ?r= gets
+// the room list stream instead, which carries only change signals.
 func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
+	role := r.URL.Query().Get("role")
+	var info rooms.Info
+	var e *timer.Engine
+	var sub *stream.Sub
+	if role == stream.RoleConsole && r.URL.Query().Get("r") == "" {
+		sub = s.hub.Subscribe(role, "")
+	} else {
+		var ok bool
+		if info, e, ok = s.roomFromQuery(w, r); !ok {
+			return
+		}
+		sub = s.hub.Subscribe(role, info.ID)
+		// A delete that ran before Subscribe would never disconnect us.
+		if _, _, ok := s.rooms.Get(info.ID); !ok {
+			s.hub.Unsubscribe(sub)
+			writeErr(w, http.StatusNotFound, "room_not_found", "房间不存在")
+			return
+		}
+	}
+	defer s.hub.Unsubscribe(sub)
+
 	rc := http.NewResponseController(w)
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream; charset=utf-8")
 	h.Set("Cache-Control", "no-cache, no-transform")
 	h.Set("Connection", "keep-alive")
 	h.Set("X-Accel-Buffering", "no")
-
-	sub := s.hub.Subscribe(r.URL.Query().Get("role"))
-	defer s.hub.Unsubscribe(sub)
-
-	snap := s.engine.Snapshot()
 	w.WriteHeader(http.StatusOK)
 	io.WriteString(w, "retry: 2000\n\n")
-	w.Write(stream.Encode("state", snap.Seq, snap))
+	if e != nil {
+		snap := e.Snapshot()
+		w.Write(stream.Encode("room", -1, info))
+		w.Write(stream.Encode("state", snap.Seq, snap))
+	}
 	if err := rc.Flush(); err != nil {
 		return
 	}
@@ -230,7 +287,13 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-tick.C:
-			if _, err := w.Write(stream.Encode("sync", -1, s.engine.Sync())); err != nil {
+			var err error
+			if e != nil {
+				_, err = w.Write(stream.Encode("sync", -1, e.Sync()))
+			} else {
+				_, err = io.WriteString(w, ": ping\n\n")
+			}
+			if err != nil {
 				return
 			}
 		}
@@ -264,12 +327,104 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auth.setCookie(w)
-	s.record(r, "login", nil, nil)
+	s.record(r, "", "login", nil, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	s.auth.clearCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- rooms ----
+
+type roomHandler func(w http.ResponseWriter, r *http.Request, info rooms.Info, e *timer.Engine)
+
+// inRoom resolves the {room} path segment.
+func (s *Server) inRoom(h roomHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := rooms.ParseID(r.PathValue("room"))
+		if !ok {
+			s.opError(w, rooms.ErrNotFound)
+			return
+		}
+		info, e, ok := s.rooms.Get(id)
+		if !ok {
+			s.opError(w, rooms.ErrNotFound)
+			return
+		}
+		h(w, r, info, e)
+	}
+}
+
+// roomSummary is a room as the console sees it.
+type roomSummary struct {
+	rooms.Info
+	Clients int         `json:"clients"`
+	State   timer.State `json:"state"`
+}
+
+func (s *Server) summary(info rooms.Info, st timer.State) roomSummary {
+	return roomSummary{Info: info, Clients: s.hub.Counts(info.ID)[stream.RoleClient], State: st}
+}
+
+// publicRoom lets a client check that a room exists before joining it.
+func (s *Server) publicRoom(w http.ResponseWriter, r *http.Request, info rooms.Info, _ *timer.Engine) {
+	writeJSON(w, http.StatusOK, map[string]string{"id": info.ID, "name": info.Name})
+}
+
+func (s *Server) listRooms(w http.ResponseWriter, r *http.Request) {
+	list := s.rooms.List()
+	out := make([]roomSummary, len(list))
+	for i, rm := range list {
+		out[i] = s.summary(rm.Info, rm.State)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) getRoom(w http.ResponseWriter, r *http.Request, info rooms.Info, e *timer.Engine) {
+	writeJSON(w, http.StatusOK, s.summary(info, e.Snapshot()))
+}
+
+func (s *Server) createRoom(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	info, err := s.rooms.Create(r.Context(), body.Name)
+	if err != nil {
+		s.opError(w, err)
+		return
+	}
+	_, e, _ := s.rooms.Get(info.ID)
+	s.record(r, info.ID, "room.create", map[string]any{"name": info.Name}, nil)
+	writeJSON(w, http.StatusCreated, s.summary(info, e.Snapshot()))
+}
+
+func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request, info rooms.Info, e *timer.Engine) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	info, err := s.rooms.Rename(r.Context(), info.ID, body.Name)
+	if err != nil {
+		s.opError(w, err)
+		return
+	}
+	s.record(r, info.ID, "room.rename", map[string]any{"name": info.Name}, nil)
+	writeJSON(w, http.StatusOK, s.summary(info, e.Snapshot()))
+}
+
+func (s *Server) deleteRoom(w http.ResponseWriter, r *http.Request, info rooms.Info, _ *timer.Engine) {
+	if _, err := s.rooms.Delete(r.Context(), info.ID); err != nil {
+		s.opError(w, err)
+		return
+	}
+	s.record(r, info.ID, "room.delete", map[string]any{"name": info.Name}, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -279,23 +434,23 @@ type seqBody struct {
 	IfSeq *int64 `json:"if_seq"`
 }
 
-func (s *Server) simpleOp(action string, op func(*int64) (timer.State, error)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (s *Server) simpleOp(action string, op func(*timer.Engine, *int64) (timer.State, error)) roomHandler {
+	return func(w http.ResponseWriter, r *http.Request, info rooms.Info, e *timer.Engine) {
 		var body seqBody
 		if !decode(w, r, &body) {
 			return
 		}
-		st, err := op(body.IfSeq)
+		st, err := op(e, body.IfSeq)
 		if err != nil {
 			s.opError(w, err)
 			return
 		}
-		s.record(r, action, nil, &st.Seq)
+		s.record(r, info.ID, action, nil, &st.Seq)
 		writeJSON(w, http.StatusOK, st)
 	}
 }
 
-func (s *Server) start(w http.ResponseWriter, r *http.Request) {
+func (s *Server) start(w http.ResponseWriter, r *http.Request, info rooms.Info, e *timer.Engine) {
 	var body struct {
 		PresetID string `json:"preset_id"`
 		IfSeq    *int64 `json:"if_seq"`
@@ -319,52 +474,37 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		s.opError(w, err)
 		return
 	}
-	st, err := s.engine.Start(cfg, body.IfSeq)
+	st, err := e.Start(cfg, body.IfSeq)
 	if err != nil {
 		s.opError(w, err)
 		return
 	}
-	s.record(r, "start", params, &st.Seq)
+	s.record(r, info.ID, "start", params, &st.Seq)
 	writeJSON(w, http.StatusOK, st)
 }
 
-func (s *Server) extend(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		DeltaMs int64            `json:"delta_ms"`
-		Mode    timer.ExtendMode `json:"mode"`
-		IfSeq   *int64           `json:"if_seq"`
+// adjust serves extend and reduce, which take the same body.
+func (s *Server) adjust(action string, op func(*timer.Engine, time.Duration, timer.ExtendMode, *int64) (timer.State, error)) roomHandler {
+	return func(w http.ResponseWriter, r *http.Request, info rooms.Info, e *timer.Engine) {
+		var body struct {
+			DeltaMs int64            `json:"delta_ms"`
+			Mode    timer.ExtendMode `json:"mode"`
+			IfSeq   *int64           `json:"if_seq"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		st, err := op(e, time.Duration(body.DeltaMs)*time.Millisecond, body.Mode, body.IfSeq)
+		if err != nil {
+			s.opError(w, err)
+			return
+		}
+		s.record(r, info.ID, action, map[string]any{"delta_ms": body.DeltaMs, "mode": body.Mode}, &st.Seq)
+		writeJSON(w, http.StatusOK, st)
 	}
-	if !decode(w, r, &body) {
-		return
-	}
-	st, err := s.engine.Extend(time.Duration(body.DeltaMs)*time.Millisecond, body.Mode, body.IfSeq)
-	if err != nil {
-		s.opError(w, err)
-		return
-	}
-	s.record(r, "extend", map[string]any{"delta_ms": body.DeltaMs, "mode": body.Mode}, &st.Seq)
-	writeJSON(w, http.StatusOK, st)
 }
 
-func (s *Server) reduce(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		DeltaMs int64            `json:"delta_ms"`
-		Mode    timer.ExtendMode `json:"mode"`
-		IfSeq   *int64           `json:"if_seq"`
-	}
-	if !decode(w, r, &body) {
-		return
-	}
-	st, err := s.engine.Reduce(time.Duration(body.DeltaMs)*time.Millisecond, body.Mode, body.IfSeq)
-	if err != nil {
-		s.opError(w, err)
-		return
-	}
-	s.record(r, "reduce", map[string]any{"delta_ms": body.DeltaMs, "mode": body.Mode}, &st.Seq)
-	writeJSON(w, http.StatusOK, st)
-}
-
-func (s *Server) setReminders(w http.ResponseWriter, r *http.Request) {
+func (s *Server) setReminders(w http.ResponseWriter, r *http.Request, info rooms.Info, e *timer.Engine) {
 	var body struct {
 		Reminders      []timer.Reminder `json:"reminders"`
 		IfSeq          *int64           `json:"if_seq"`
@@ -373,12 +513,12 @@ func (s *Server) setReminders(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body) {
 		return
 	}
-	st, err := s.engine.SetReminders(body.Reminders, body.IfSeq, body.IfRemindersSeq)
+	st, err := e.SetReminders(body.Reminders, body.IfSeq, body.IfRemindersSeq)
 	if err != nil {
 		s.opError(w, err)
 		return
 	}
-	s.record(r, "reminders", map[string]any{"count": len(st.Reminders)}, &st.Seq)
+	s.record(r, info.ID, "reminders", map[string]any{"count": len(st.Reminders)}, &st.Seq)
 	writeJSON(w, http.StatusOK, st)
 }
 
@@ -421,7 +561,7 @@ func (s *Server) createPreset(w http.ResponseWriter, r *http.Request) {
 		s.opError(w, err)
 		return
 	}
-	s.record(r, "preset.create", map[string]any{"id": p.ID, "name": p.Name}, nil)
+	s.record(r, "", "preset.create", map[string]any{"id": p.ID, "name": p.Name}, nil)
 	s.presetsChanged()
 	writeJSON(w, http.StatusCreated, p)
 }
@@ -441,7 +581,7 @@ func (s *Server) updatePreset(w http.ResponseWriter, r *http.Request) {
 		s.opError(w, err)
 		return
 	}
-	s.record(r, "preset.update", map[string]any{"id": p.ID, "name": p.Name}, nil)
+	s.record(r, "", "preset.update", map[string]any{"id": p.ID, "name": p.Name}, nil)
 	s.presetsChanged()
 	writeJSON(w, http.StatusOK, p)
 }
@@ -452,7 +592,7 @@ func (s *Server) deletePreset(w http.ResponseWriter, r *http.Request) {
 		s.opError(w, err)
 		return
 	}
-	s.record(r, "preset.delete", map[string]any{"id": id}, nil)
+	s.record(r, "", "preset.delete", map[string]any{"id": id}, nil)
 	s.presetsChanged()
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -468,16 +608,12 @@ func (s *Server) reorderPresets(w http.ResponseWriter, r *http.Request) {
 		s.opError(w, err)
 		return
 	}
-	s.record(r, "preset.reorder", nil, nil)
+	s.record(r, "", "preset.reorder", nil, nil)
 	s.presetsChanged()
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // ---- misc ----
-
-func (s *Server) clients(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.hub.Counts())
-}
 
 func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))

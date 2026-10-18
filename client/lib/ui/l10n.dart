@@ -15,6 +15,10 @@ class Strings {
     required this.connect,
     required this.cannotConnect,
     required this.badAddress,
+    required this.missingRoom,
+    required this.roomNotFound,
+    required this.roomDeleted,
+    required this.room,
     required this.connected,
     required this.connecting,
     required this.disconnected,
@@ -68,6 +72,10 @@ class Strings {
   final String connect;
   final String cannotConnect;
   final String badAddress;
+  final String missingRoom;
+  final String roomNotFound;
+  final String roomDeleted;
+  final String room;
   final String connected;
   final String connecting;
   final String disconnected;
@@ -131,11 +139,15 @@ class Strings {
 
   static const zh = Strings._(
     appName: '子午',
-    serverAddress: '服务器地址',
-    addressHint: 'https://example/meridian',
+    serverAddress: '房间地址',
+    addressHint: 'https://example/meridian?r=…',
     connect: '连接',
     cannotConnect: '连不上这个地址。检查地址是否正确，或服务器是否在运行。',
     badAddress: '这不是一个有效的地址。',
+    missingRoom: '地址里缺少房间号。在控制台进入房间，复制那里的客户端地址。',
+    roomNotFound: '这个房间不存在。检查地址，或在控制台复制最新的客户端地址。',
+    roomDeleted: '这个房间已被删除。填写新的房间地址。',
+    room: '房间',
     connected: '已连接',
     connecting: '连接中',
     disconnected: '未连接',
@@ -205,16 +217,20 @@ class Strings {
       '这个程序只做一件事：让每个窗口都统一现在是几点。',
     ],
     slogan: '所有窗口，同一个现在。',
-    solarTerm: '小满',
+    solarTerm: '芒种',
   );
 
   static const en = Strings._(
     appName: 'Meridian',
-    serverAddress: 'Server address',
-    addressHint: 'https://example/meridian',
+    serverAddress: 'Room address',
+    addressHint: 'https://example/meridian?r=…',
     connect: 'Connect',
     cannotConnect: "Can't reach this address. Check that it is correct and the server is running.",
     badAddress: 'This is not a valid address.',
+    missingRoom: 'The address has no room. Open the room in the console and copy its client address.',
+    roomNotFound: 'This room does not exist. Check the address, or copy the latest client address from the console.',
+    roomDeleted: 'This room was deleted. Enter the address of another room.',
+    room: 'Room',
     connected: 'Connected',
     connecting: 'Connecting',
     disconnected: 'Disconnected',
@@ -284,7 +300,7 @@ class Strings {
       'This program does one thing: make every window agree on what time it is.',
     ],
     slogan: 'Every window, the same now.',
-    solarTerm: 'Grain Buds',
+    solarTerm: 'Grain in Ear',
   );
 
   static Strings of(LangChoice choice) => switch (choice) {
@@ -295,4 +311,4 @@ class Strings {
 }
 
 /// Shown on the about page next to the solar term.
-const appVersion = 'v1.0.0';
+const appVersion = 'v1.1.0';

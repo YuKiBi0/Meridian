@@ -24,7 +24,7 @@ void main() {
 
   testWidgets('window follows style, placement and panel switches', (t) async {
     // An address nobody listens on: the app shows its views, waiting.
-    SharedPreferences.setMockInitialValues({'address': 'http://127.0.0.1:9/meridian', 'style': 'ring'});
+    SharedPreferences.setMockInitialValues({'address': 'http://127.0.0.1:9/meridian?r=0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506', 'style': 'ring'});
     final settings = await Settings.load();
     final window = WindowController();
     await window.init('Meridian test');

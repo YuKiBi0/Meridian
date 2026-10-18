@@ -26,11 +26,20 @@ function when(at: string) {
   })
 }
 
+/** The room an entry belongs to; deleted rooms keep the name they had. */
+function roomOf(e: LogEntry) {
+  if (!e.room_id) return ''
+  if (e.room_name) return e.room_name
+  const name = e.params?.name
+  return e.action.startsWith('room.') && typeof name === 'string' ? name : t.value.deletedRoom
+}
+
 function detail(e: LogEntry) {
   const p = e.params ?? {}
   const parts: string[] = []
   if (typeof p.preset === 'string') parts.push(p.preset)
-  else if (typeof p.name === 'string') parts.push(p.name)
+  else if (typeof p.name === 'string' && !e.action.startsWith('room.')) parts.push(p.name)
+  else if (e.action === 'room.rename' && typeof p.name === 'string') parts.push(p.name)
   else if (typeof p.title === 'string' && p.title) parts.push(p.title)
   if (typeof p.total_ms === 'number') parts.push(formatDuration(p.total_ms))
   if (typeof p.delta_ms === 'number') {
@@ -49,6 +58,7 @@ function detail(e: LogEntry) {
       <table v-else-if="logs">
         <tr v-for="e in logs" :key="e.id">
           <td class="muted num">{{ when(e.at) }}</td>
+          <td class="room">{{ roomOf(e) }}</td>
           <td>{{ t.logAction[e.action] ?? e.action }}</td>
           <td class="muted">{{ detail(e) }}</td>
         </tr>
@@ -72,6 +82,12 @@ td {
   vertical-align: top;
 }
 td:first-child {
+  white-space: nowrap;
+}
+.room {
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 </style>

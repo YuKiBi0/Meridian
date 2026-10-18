@@ -155,6 +155,28 @@ label {
   margin-top: 4px;
 }
 
+/* Transient message at the bottom of the page */
+.notice {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translate(-50%, 4px);
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  background: var(--fg);
+  color: var(--on-fg);
+  border-radius: var(--r-md);
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 160ms linear,
+    transform 160ms ease-out;
+}
+.notice.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
 /* Dialogs */
 .overlay {
   position: fixed;
