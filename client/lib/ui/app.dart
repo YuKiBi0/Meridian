@@ -94,9 +94,11 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
   @override
   void initState() {
     super.initState();
-    final address = _s.address == null ? null : normalizeAddress(_s.address!);
+    final address = _s.address == null ? null : RoomAddress.parse(_s.address!);
     _mode = address == null ? AppMode.connect : AppMode.view;
-    if (address != null) _conn.connect(address);
+    // An address saved by 1.0 has no room.
+    if (_s.address != null && address == null) _addressError = _t.missingRoom;
+    if (address != null) _conn.connect(address, roomName: _s.roomName);
 
     _conn.addListener(_onConnection);
     _s.addListener(_onSettings);
@@ -138,6 +140,19 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
   // ---- reactions ----
 
   void _onConnection() {
+    if (_conn.roomGone && !_leftRoom) {
+      // PRD CLI-03: back to the address page when the room is deleted.
+      _leftRoom = true;
+      _pendingConnect = false;
+      _addressError = _t.roomDeleted;
+      _toasts.clear();
+      _mode = AppMode.connect;
+      _relayout();
+    }
+    final name = _conn.roomName;
+    if (name != null && name != _s.roomName && !_conn.roomGone) {
+      _s.update((s) => s.roomName = name);
+    }
     if (_mode == AppMode.connect && _conn.everConnected && _pendingConnect) {
       _pendingConnect = false;
       _mode = AppMode.view;
@@ -300,6 +315,11 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
 
   bool _pendingConnect = false;
 
+  /// Why the connect page is shown, if not first run: the saved address has
+  /// no room, or the room was deleted.
+  String? _addressError;
+  bool _leftRoom = false;
+
   bool get _draggable => _mode == AppMode.view && (_s.style == ViewStyle.ring || _s.style == ViewStyle.digits);
 
   @override
@@ -370,8 +390,11 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
     }
   }
 
+  /// Whether the connect page can be closed: only with a room to go back to.
+  bool get _canLeaveConnect => _s.address != null && _addressError == null;
+
   void _openPanel(AppMode mode) {
-    if (_mode == AppMode.connect && _s.address == null) return;
+    if (_mode == AppMode.connect && !_canLeaveConnect) return;
     _returnTo = _mode == AppMode.settings ? AppMode.settings : AppMode.view;
     setState(() => _mode = mode);
     _relayout();
@@ -387,10 +410,15 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
     await _win.quit();
   }
 
-  void _connect(Uri uri) {
+  void _connect(RoomAddress address, String roomName) {
     _pendingConnect = true;
-    _s.update((s) => s.address = displayAddress(uri));
-    _conn.connect(uri);
+    _addressError = null;
+    _leftRoom = false;
+    _s.update((s) {
+      s.address = address.display;
+      s.roomName = roomName;
+    });
+    _conn.connect(address, roomName: roomName);
   }
 
   // ---- build ----
@@ -465,17 +493,21 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
     final Widget body = switch (_mode) {
       AppMode.view => _view(p),
       AppMode.connect => ConnectPage(
+          // A new reason to be here starts the page over.
+          key: ValueKey(_addressError),
           palette: p,
           strings: t,
           connection: _conn,
           initial: _s.address,
+          initialError: _addressError,
           onConnect: _connect,
-          onClose: _s.address == null ? null : _closePanel,
+          onClose: _canLeaveConnect ? _closePanel : null,
         ),
       AppMode.settings => SettingsPage(
           palette: p,
           strings: t,
           settings: _s,
+          roomName: _conn.roomName ?? _s.roomName,
           displays: [
             for (final (i, m) in _monitors.indexed)
               if (!m.primary) (id: m.id, name: '${t.display} ${i + 1}'),

@@ -73,7 +73,12 @@ class Settings extends ChangeNotifier {
 
   final SharedPreferences _prefs;
 
+  /// The room address: server address with `?r=<room id>`.
   String? address;
+
+  /// The room's name as last seen, shown in settings (it is not the
+  /// countdown title).
+  String? roomName;
   ViewStyle style = ViewStyle.ring;
   final Map<ViewStyle, Placement> placement = {
     for (final s in ViewStyle.values) s: placementsFor[s]!.first,
@@ -105,6 +110,7 @@ class Settings extends ChangeNotifier {
   void _load() {
     final p = _prefs;
     address = p.getString('address');
+    roomName = p.getString('roomName');
     style = _enum(ViewStyle.values, p.getString('style'), style);
     for (final s in ViewStyle.values) {
       final v = _enum(Placement.values, p.getString('placement.${s.name}'), placement[s]!);
@@ -143,6 +149,11 @@ class Settings extends ChangeNotifier {
       p.remove('address');
     } else {
       p.setString('address', address!);
+    }
+    if (roomName == null) {
+      p.remove('roomName');
+    } else {
+      p.setString('roomName', roomName!);
     }
     p.setString('style', style.name);
     for (final s in ViewStyle.values) {

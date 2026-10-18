@@ -16,6 +16,7 @@ class SettingsPage extends StatelessWidget {
     required this.palette,
     required this.strings,
     required this.settings,
+    required this.roomName,
     required this.displays,
     required this.onChangeAddress,
     required this.onClose,
@@ -24,6 +25,9 @@ class SettingsPage extends StatelessWidget {
   final Palette palette;
   final Strings strings;
   final Settings settings;
+
+  /// The room's name (not the countdown title), if known.
+  final String? roomName;
   final List<DisplayChoice> displays;
   final VoidCallback onChangeAddress;
   final VoidCallback onClose;
@@ -96,13 +100,18 @@ class SettingsPage extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
         children: [
-          SectionTitle(s.connection, palette: p),
+          SectionTitle(s.room, palette: p),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(children: [
               Expanded(
-                child: Text(st.address ?? '—',
-                    style: textStyle(14, p.fg), maxLines: 1, overflow: TextOverflow.ellipsis),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(roomName == null || roomName!.isEmpty ? '—' : roomName!,
+                      style: textStyle(14, p.fg), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text(st.address ?? '',
+                      style: textStyle(12, p.fgMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ]),
               ),
               TextAction(label: s.change, palette: p, onTap: onChangeAddress, strong: true),
             ]),
