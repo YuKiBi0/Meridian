@@ -7,7 +7,9 @@ import 'package:tray_manager/tray_manager.dart' show Menu, MenuItem, trayManager
 
 import '../core/display.dart';
 import '../settings.dart';
+import 'colors.dart';
 import 'l10n.dart';
+import 'tray_icon.dart';
 
 enum TrayDot { hollow, solid, running, alert }
 
@@ -33,14 +35,25 @@ abstract final class MenuKeys {
 
 class Tray {
   String? _icon;
+  int _iconRequest = 0;
   String? _tooltip;
   String? _menuSignature;
 
-  /// Sets the icon for [dot]; the body follows the taskbar brightness.
-  Future<void> setIcon(TrayDot dot, Brightness brightness) async {
+  /// Sets the icon for [dot]; the body follows the taskbar brightness and a
+  /// running dot takes the progress colour [accent].
+  Future<void> setIcon(TrayDot dot, Brightness brightness, Color accent) async {
+    final request = ++_iconRequest;
     final theme = brightness == Brightness.dark ? 'paper' : 'ink';
-    final path = 'assets/tray/${dot.name}_$theme.ico';
-    if (path == _icon) return;
+    var path = 'assets/tray/${dot.name}_$theme.ico';
+    if (dot == TrayDot.running && accent != defaultAccent) {
+      try {
+        // An absolute path: tray_manager joins it onto flutter_assets.
+        path = await runningIconFile(accent, brightness);
+      } catch (_) {
+        // Keep the bundled amber icon.
+      }
+    }
+    if (request != _iconRequest || path == _icon) return; // superseded or unchanged
     _icon = path;
     await trayManager.setIcon(path);
   }

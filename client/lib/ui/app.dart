@@ -85,7 +85,7 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
         ThemeChoice.light => Palette.light,
         ThemeChoice.dark => Palette.dark,
         ThemeChoice.system => _systemBrightness == Brightness.dark ? Palette.dark : Palette.light,
-      };
+      }.withAccent(Color(_s.accentColor));
 
   DisplayModel get _model => DisplayModel.from(_countdown, _conn.link, everConnected: _conn.everConnected);
 
@@ -283,10 +283,12 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
       margin: _s.margin,
       free: free == null ? null : work.topLeft + Offset(free.x, free.y),
       toasts: _toasts.items.length,
+      toastPosition: _s.toastPosition,
     );
     _viewSize = viewSize;
     if (mounted) setState(() => _layout = layout);
-    await _win.setBounds(layout.window, monitor);
+    // Clip to the view and the cards so the gap between them stays clickable.
+    await _win.setBounds(layout.window, monitor, region: layout.toast == null ? null : [layout.view, layout.toast!]);
     await _win.setNoActivate(true);
     await _win.setSkipTaskbar(true);
     await _win.setTopmost(_s.alwaysOnTop);
@@ -333,7 +335,7 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
 
   void _syncTray() {
     final model = _model;
-    _tray.setIcon(trayDotFor(model, _conn.everConnected), _systemBrightness);
+    _tray.setIcon(trayDotFor(model, _conn.everConnected), _systemBrightness, Color(_s.accentColor));
     _tray.setMenu(_s, _t);
     final label = _t.label(model.label);
     final tip = !_conn.everConnected

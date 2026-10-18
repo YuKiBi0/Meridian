@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../settings.dart';
 import '../l10n.dart';
 import '../theme.dart';
+import 'accent_picker.dart';
 import 'widgets.dart';
 
 /// A display the user can pick (id and a readable name).
@@ -148,6 +149,16 @@ class SettingsPage extends StatelessWidget {
                 onChanged: (v) => set((x) => x.displayId = v),
               ),
             ),
+          SettingRow(
+            palette: p,
+            label: s.toastPosition,
+            child: Segmented<ToastPosition>(
+              palette: p,
+              value: st.toastPosition,
+              options: s.toastPositionNames,
+              onChanged: (v) => set((x) => x.toastPosition = v),
+            ),
+          ),
           SectionTitle(s.window, palette: p),
           SwitchRow(palette: p, label: s.alwaysOnTop, value: st.alwaysOnTop, onChanged: (v) => set((x) => x.alwaysOnTop = v)),
           SwitchRow(palette: p, label: s.clickThrough, value: st.clickThrough, onChanged: (v) => set((x) => x.clickThrough = v)),
@@ -172,6 +183,18 @@ class SettingsPage extends StatelessWidget {
               value: st.theme,
               options: s.themeNames,
               onChanged: (v) => set((x) => x.theme = v),
+            ),
+          ),
+          SettingRow(
+            palette: p,
+            label: s.progressColor,
+            child: AccentPicker(
+              palette: p,
+              value: p.accent,
+              names: s.accentNames,
+              customLabel: s.customColor,
+              badHex: s.badHex,
+              onChanged: (c) => set((x) => x.accentColor = c.toARGB32()),
             ),
           ),
           SettingRow(
