@@ -125,3 +125,4 @@ app.*.symbols
 !/server/internal/web/dist/.gitkeep
 /console/dist/
 /deploy/.env
+/console/node_modules/
