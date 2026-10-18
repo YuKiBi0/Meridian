@@ -51,6 +51,8 @@ curl http://127.0.0.1:8090/meridian/healthz   # {"status":"ok"}
 
 ## 升级
 
+在仓库目录里运行 `scripts/release.sh deploy`，会部署最新的版本标签；`scripts/release.sh deploy 1.0.0` 部署指定版本，见 [发版](RELEASING.md#4-部署服务端)。也可以手动操作：
+
 ```sh
 git pull
 # 按需修改 deploy/.env 里的 MERIDIAN_VERSION
