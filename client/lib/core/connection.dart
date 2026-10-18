@@ -79,10 +79,16 @@ class ServerConnection extends ChangeNotifier {
     _generation++;
     _retryTimer?.cancel();
     _watchdog?.cancel();
-    _sub?.cancel();
+    final sub = _sub, client = _client;
     _sub = null;
-    _client?.close();
     _client = null;
+    // Close the socket only after the stream is cancelled, so the abort is
+    // not reported as an error to a listener that no longer exists.
+    if (sub != null) {
+      unawaited(sub.cancel().whenComplete(() => client?.close()));
+    } else {
+      client?.close();
+    }
   }
 
   void _setLink(Link l) {
