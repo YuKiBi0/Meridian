@@ -1,0 +1,9 @@
+.git
+tmp
+docs
+client
+deploy/.env
+**/node_modules
+console/dist
+server/internal/web/dist/*
+!server/internal/web/dist/.gitkeep
