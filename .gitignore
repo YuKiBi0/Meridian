@@ -126,3 +126,4 @@ app.*.symbols
 /console/dist/
 /deploy/.env
 /console/node_modules/
+/client/test/_preview/
