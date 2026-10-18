@@ -210,6 +210,12 @@ void FlutterWindow::HandleWindowCall(
     RECT r{};
     GetWindowRect(hwnd, &r);
     result->Success(EncodableValue(RectMap(r)));
+  } else if (method == "contentBounds") {
+    // The Flutter view's own window, for checking it follows the frame.
+    RECT r{};
+    HWND view = flutter_controller_->view()->GetNativeWindow();
+    GetClientRect(view, &r);
+    result->Success(EncodableValue(RectMap(r)));
   } else if (method == "scale") {
     result->Success(EncodableValue(GetDpiForWindow(hwnd) / 96.0));
   } else {
