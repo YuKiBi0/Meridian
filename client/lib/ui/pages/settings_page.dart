@@ -149,16 +149,6 @@ class SettingsPage extends StatelessWidget {
                 onChanged: (v) => set((x) => x.displayId = v),
               ),
             ),
-          SettingRow(
-            palette: p,
-            label: s.toastPosition,
-            child: Segmented<ToastPosition>(
-              palette: p,
-              value: st.toastPosition,
-              options: s.toastPositionNames,
-              onChanged: (v) => set((x) => x.toastPosition = v),
-            ),
-          ),
           SectionTitle(s.window, palette: p),
           SwitchRow(palette: p, label: s.alwaysOnTop, value: st.alwaysOnTop, onChanged: (v) => set((x) => x.alwaysOnTop = v)),
           SwitchRow(palette: p, label: s.clickThrough, value: st.clickThrough, onChanged: (v) => set((x) => x.clickThrough = v)),

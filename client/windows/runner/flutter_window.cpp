@@ -162,27 +162,6 @@ void FlutterWindow::HandleWindowCall(
     SetWindowPos(hwnd, nullptr, r.left, r.top, r.right - r.left,
                  r.bottom - r.top,
                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-    // Optional visible region (window-relative physical rects). Outside it
-    // the window neither paints nor takes clicks, so a view and a distant
-    // reminder card can share one window without blocking what is between.
-    HRGN region = nullptr;
-    auto it = a.find(EncodableValue("region"));
-    if (it != a.end()) {
-      if (const auto* rects = std::get_if<EncodableList>(&it->second)) {
-        region = CreateRectRgn(0, 0, 0, 0);
-        for (const auto& v : *rects) {
-          const auto* m = std::get_if<EncodableMap>(&v);
-          if (!m) continue;
-          HRGN part = CreateRectRgn(ArgInt(*m, "x"), ArgInt(*m, "y"),
-                                    ArgInt(*m, "x") + ArgInt(*m, "w"),
-                                    ArgInt(*m, "y") + ArgInt(*m, "h"));
-          CombineRgn(region, region, part, RGN_OR);
-          DeleteObject(part);
-        }
-      }
-    }
-    // The system owns the region after this call.
-    SetWindowRgn(hwnd, region, TRUE);
     result->Success();
   } else if (method == "setTopmost") {
     // Re-asserting HWND_TOPMOST lifts the window above other topmost

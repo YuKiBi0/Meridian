@@ -3,7 +3,6 @@
 /// logical pixels of the target display.
 library;
 
-import 'dart:math' as math;
 import 'dart:ui';
 
 import '../settings.dart';
@@ -68,8 +67,7 @@ ToastSide toastSideFor(Placement p, Rect view, Rect work) => switch (p) {
       Placement.free => view.center.dy < work.center.dy ? ToastSide.below : ToastSide.above,
     };
 
-/// Computes the full layout. [toasts] is the number of reminder cards and
-/// [toastPosition] where they go.
+/// Computes the full layout. [toasts] is the number of reminder cards.
 Layout layoutFor({
   required Rect work,
   required Placement placement,
@@ -77,26 +75,13 @@ Layout layoutFor({
   required double margin,
   Offset? free,
   int toasts = 0,
-  ToastPosition toastPosition = ToastPosition.followView,
 }) {
   final view = placeView(work, placement, viewSize, margin, free: free);
   if (toasts <= 0) {
     return Layout(window: view, view: Offset.zero & view.size);
   }
-  final ts = toastAreaSize(toasts);
-  final (toast, side) = _cornerToast(work, view, ts, margin, toastPosition) ?? _followToast(work, view, ts, placement);
-  final window = view.expandToInclude(toast);
-  return Layout(
-    window: window,
-    view: view.shift(-window.topLeft),
-    toast: toast.shift(-window.topLeft),
-    toastSide: side,
-  );
-}
-
-/// Cards right next to the view, on its inner side.
-(Rect, ToastSide) _followToast(Rect work, Rect view, Size ts, Placement placement) {
   final side = toastSideFor(placement, view, work);
+  final ts = toastAreaSize(toasts);
   final alignLeft = placement == Placement.topLeft ||
       placement == Placement.bottomLeft ||
       (placement == Placement.free && view.center.dx < work.center.dx);
@@ -110,30 +95,14 @@ Layout layoutFor({
     ToastSide.right => Offset(view.right + toastGap, view.center.dy - ts.height / 2),
     ToastSide.left => Offset(view.left - toastGap - ts.width, view.center.dy - ts.height / 2),
   };
-  return (_clampInto(origin & ts, work), side);
-}
-
-/// Cards in a corner of the work area. When the view already sits there the
-/// cards step past it (below/above first, then beside it); null when they
-/// cannot fit, and the caller falls back to following the view.
-(Rect, ToastSide)? _cornerToast(Rect work, Rect view, Size ts, double margin, ToastPosition pos) {
-  if (pos == ToastPosition.followView) return null;
-  final top = pos == ToastPosition.topRight || pos == ToastPosition.topLeft;
-  final right = pos == ToastPosition.topRight || pos == ToastPosition.bottomRight;
-  final inset = math.max(margin, toastGap);
-  final x = right ? work.right - inset - ts.width : work.left + inset;
-  final y = top ? work.top + inset : work.bottom - inset - ts.height;
-  final side = top ? ToastSide.below : ToastSide.above;
-  final candidates = [
-    Offset(x, y) & ts,
-    Offset(x, top ? view.bottom + toastGap : view.top - toastGap - ts.height) & ts,
-    Offset(right ? view.left - toastGap - ts.width : view.right + toastGap, y) & ts,
-  ];
-  for (final r in candidates) {
-    final inside = r.left >= work.left && r.top >= work.top && r.right <= work.right && r.bottom <= work.bottom;
-    if (inside && !r.overlaps(view)) return (r, side);
-  }
-  return null;
+  final toast = _clampInto(origin & ts, work);
+  final window = view.expandToInclude(toast);
+  return Layout(
+    window: window,
+    view: view.shift(-window.topLeft),
+    toast: toast.shift(-window.topLeft),
+    toastSide: side,
+  );
 }
 
 /// After a free drag, returns the placement the view should snap to, or
