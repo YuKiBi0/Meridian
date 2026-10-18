@@ -378,7 +378,7 @@ func TestSetReminders(t *testing.T) {
 		{AtMs: ms(9 * time.Minute), Text: "九分钟"},               // added in the past: never fires
 		{AtMs: ms(3 * time.Minute), Text: "三分钟"},               // ahead: fires later
 		{ID: "m_b", AtMs: ms(1 * time.Minute), Text: "一分钟", Sticky: true},
-	}, at(3*time.Minute))
+	}, nil, at(3*time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,10 +400,37 @@ func TestSetReminders(t *testing.T) {
 	}
 	// Validation uses the current total.
 	var ve *ValidationError
-	if err := tm.SetReminders([]Reminder{{AtMs: ms(10 * time.Minute), Text: "x"}}, at(7*time.Minute)); !errors.As(err, &ve) {
+	if err := tm.SetReminders([]Reminder{{AtMs: ms(10 * time.Minute), Text: "x"}}, nil, at(7*time.Minute)); !errors.As(err, &ve) {
 		t.Fatalf("at == total: %v", err)
 	}
-	if err := New().SetReminders(nil, t0); !errors.Is(err, ErrInvalidState) {
+	if err := New().SetReminders(nil, nil, t0); !errors.Is(err, ErrInvalidState) {
 		t.Fatalf("idle: %v", err)
+	}
+}
+
+func TestSetRemindersConflict(t *testing.T) {
+	tm := started(cfg(10 * time.Minute))
+	opened := tm.Snapshot(t0).RemindersSeq
+	if opened != tm.Seq() {
+		t.Fatalf("reminders seq %d, seq %d", opened, tm.Seq())
+	}
+	// Other operations do not invalidate an open reminder editor.
+	tm.Pause(at(time.Minute))
+	tm.Extend(time.Minute, ExtendTotal, at(time.Minute))
+	if err := tm.SetReminders([]Reminder{{AtMs: 0, Text: "A"}}, &opened, at(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	// A second editor that read the old reminders is refused.
+	if err := tm.SetReminders([]Reminder{{AtMs: 0, Text: "B"}}, &opened, at(time.Minute)); !errors.Is(err, ErrRemindersConflict) {
+		t.Fatalf("stale editor: %v", err)
+	}
+	if got := tm.Snapshot(at(time.Minute)).Reminders[0].Text; got != "A" {
+		t.Fatalf("reminders overwritten: %q", got)
+	}
+	// A new run invalidates it too.
+	cur := tm.Snapshot(at(time.Minute)).RemindersSeq
+	tm.Start(cfg(5*time.Minute), "r_2", at(2*time.Minute))
+	if err := tm.SetReminders(nil, &cur, at(2*time.Minute)); !errors.Is(err, ErrRemindersConflict) {
+		t.Fatalf("after restart: %v", err)
 	}
 }

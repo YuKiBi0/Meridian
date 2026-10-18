@@ -91,9 +91,9 @@ func (e *Engine) Reduce(delta time.Duration, mode ExtendMode, ifSeq *int64) (Sta
 	})
 }
 
-func (e *Engine) SetReminders(rs []Reminder, ifSeq *int64) (State, error) {
+func (e *Engine) SetReminders(rs []Reminder, ifSeq, ifRemSeq *int64) (State, error) {
 	return e.do(ifSeq, func(now time.Time) error {
-		return e.t.SetReminders(rs, now)
+		return e.t.SetReminders(rs, ifRemSeq, now)
 	})
 }
 

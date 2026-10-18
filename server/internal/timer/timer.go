@@ -8,6 +8,10 @@ import (
 var (
 	ErrInvalidState = errors.New("invalid state")
 	ErrSeqConflict  = errors.New("seq conflict")
+
+	// ErrRemindersConflict means the reminders changed since the editor
+	// read them.
+	ErrRemindersConflict = errors.New("reminders conflict")
 )
 
 // LastEnd marks a run that was just ended by an operator.
@@ -35,8 +39,11 @@ type State struct {
 	OnExpire    OnExpire        `json:"on_expire"`
 	MarksMs     []int64         `json:"marks_ms"`
 	Reminders   []ReminderState `json:"reminders"`
-	ServerTime  int64           `json:"server_time"`
-	LastEnd     *LastEnd        `json:"last_end"`
+	// RemindersSeq is the seq at which the reminders were last set; editors
+	// send it back to avoid overwriting each other.
+	RemindersSeq int64    `json:"reminders_seq"`
+	ServerTime   int64    `json:"server_time"`
+	LastEnd      *LastEnd `json:"last_end"`
 }
 
 // Sync is the heartbeat payload.
@@ -74,6 +81,7 @@ type Timer struct {
 	expiredAt time.Time     // valid while expired
 	fired     map[string]bool
 	lastEnd   *LastEnd
+	remSeq    int64 // seq at which cfg.Reminders were last set
 }
 
 // New returns an idle timer.
@@ -129,6 +137,7 @@ func (t *Timer) Start(cfg Config, runID string, now time.Time) {
 	t.fired = map[string]bool{}
 	t.lastEnd = nil
 	t.seq++
+	t.remSeq = t.seq
 }
 
 // Pause freezes a running timer.
@@ -256,9 +265,13 @@ func (t *Timer) Reduce(delta time.Duration, mode ExtendMode, now time.Time) erro
 // SetReminders replaces the reminders of the current run. A reminder whose
 // point has already passed counts as fired and never fires; one moved ahead
 // of the remaining time fires when it is reached.
-func (t *Timer) SetReminders(rs []Reminder, now time.Time) error {
+// ifRemSeq, when set, must match the current RemindersSeq.
+func (t *Timer) SetReminders(rs []Reminder, ifRemSeq *int64, now time.Time) error {
 	if t.status != Running && t.status != Paused {
 		return ErrInvalidState
+	}
+	if ifRemSeq != nil && *ifRemSeq != t.remSeq {
+		return ErrRemindersConflict
 	}
 	if err := normalizeReminders(&rs, t.total.Milliseconds()); err != nil {
 		return err
@@ -272,6 +285,7 @@ func (t *Timer) SetReminders(rs []Reminder, now time.Time) error {
 		}
 	}
 	t.seq++
+	t.remSeq = t.seq
 	return nil
 }
 
@@ -325,16 +339,17 @@ func (t *Timer) NextDeadline() (time.Time, bool) {
 // Snapshot returns the full state at now.
 func (t *Timer) Snapshot(now time.Time) State {
 	s := State{
-		Seq:         t.seq,
-		Status:      t.status,
-		Title:       t.cfg.Title,
-		TotalMs:     t.total.Milliseconds(),
-		RemainingMs: t.Remaining(now).Milliseconds(),
-		OvertimeMs:  t.OvertimeAt(now).Milliseconds(),
-		OnExpire:    t.cfg.OnExpire,
-		MarksMs:     []int64{},
-		Reminders:   []ReminderState{},
-		ServerTime:  now.UnixMilli(),
+		Seq:          t.seq,
+		Status:       t.status,
+		Title:        t.cfg.Title,
+		TotalMs:      t.total.Milliseconds(),
+		RemainingMs:  t.Remaining(now).Milliseconds(),
+		OvertimeMs:   t.OvertimeAt(now).Milliseconds(),
+		OnExpire:     t.cfg.OnExpire,
+		MarksMs:      []int64{},
+		Reminders:    []ReminderState{},
+		RemindersSeq: t.remSeq,
+		ServerTime:   now.UnixMilli(),
 	}
 	if s.OnExpire == "" {
 		s.OnExpire = Stop

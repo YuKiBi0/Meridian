@@ -232,6 +232,13 @@ func TestTimerFlowAndStream(t *testing.T) {
 	if name, m := next(); name != "state" || len(m["reminders"].([]any)) != 1 {
 		t.Fatalf("after reminders %s %v", name, m)
 	}
+	staleRem := st.RemindersSeq - 1
+	var e struct{ Error struct{ Code string } }
+	if code := call(t, c, "PUT", base+"/api/v1/admin/timer/reminders", map[string]any{
+		"reminders": []map[string]any{}, "if_reminders_seq": staleRem,
+	}, &e); code != 409 || e.Error.Code != "reminders_conflict" {
+		t.Fatalf("stale reminders %d %+v", code, e)
+	}
 	if code := call(t, c, "POST", base+"/api/v1/admin/timer/resume", nil, nil); code != 200 {
 		t.Fatalf("resume %d", code)
 	}
@@ -249,6 +256,54 @@ func TestTimerFlowAndStream(t *testing.T) {
 	call(t, c, "GET", base+"/api/v1/admin/clients", nil, &counts)
 	if counts["client"] != 1 {
 		t.Fatalf("counts %v", counts)
+	}
+}
+
+// openStream subscribes as role and returns the names of events received
+// within wait.
+func openStream(t *testing.T, url string) func(wait time.Duration) []string {
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	names := make(chan string, 16)
+	go func() {
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			if line := sc.Text(); strings.HasPrefix(line, "event: ") {
+				names <- strings.TrimPrefix(line, "event: ")
+			}
+		}
+	}()
+	return func(wait time.Duration) []string {
+		var got []string
+		deadline := time.After(wait)
+		for {
+			select {
+			case n := <-names:
+				got = append(got, n)
+			case <-deadline:
+				return got
+			}
+		}
+	}
+}
+
+func TestPresetsEventReachesConsolesOnly(t *testing.T) {
+	ts, c := newTestServer(t)
+	base := ts.URL + "/meridian/api/v1"
+	call(t, c, "POST", base+"/admin/login", map[string]string{"token": testToken}, nil)
+	console := openStream(t, base+"/stream?role=console")
+	client := openStream(t, base+"/stream?role=client")
+	console(300 * time.Millisecond)
+	client(300 * time.Millisecond)
+	call(t, c, "POST", base+"/admin/presets", map[string]any{"name": "开场", "total_ms": 300000}, nil)
+	if got := console(500 * time.Millisecond); len(got) != 1 || got[0] != "presets" {
+		t.Fatalf("console events %v", got)
+	}
+	if got := client(200 * time.Millisecond); len(got) != 0 {
+		t.Fatalf("client events %v", got)
 	}
 }
 
