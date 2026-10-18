@@ -217,7 +217,7 @@ class Strings {
       '这个程序只做一件事：让每个窗口都统一现在是几点。',
     ],
     slogan: '所有窗口，同一个现在。',
-    solarTerm: '小满',
+    solarTerm: '芒种',
   );
 
   static const en = Strings._(
@@ -300,7 +300,7 @@ class Strings {
       'This program does one thing: make every window agree on what time it is.',
     ],
     slogan: 'Every window, the same now.',
-    solarTerm: 'Grain Buds',
+    solarTerm: 'Grain in Ear',
   );
 
   static Strings of(LangChoice choice) => switch (choice) {
@@ -311,4 +311,4 @@ class Strings {
 }
 
 /// Shown on the about page next to the solar term.
-const appVersion = 'v1.0.0';
+const appVersion = 'v1.1.0';
