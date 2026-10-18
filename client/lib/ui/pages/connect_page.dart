@@ -6,7 +6,8 @@ import '../l10n.dart';
 import '../theme.dart';
 import 'widgets.dart';
 
-/// First-run page: one address field and a Connect button (PRD CLI-01).
+/// First-run page: one room address field and a Connect button (PRD CLI-01).
+/// The room is looked up before joining it.
 class ConnectPage extends StatefulWidget {
   const ConnectPage({
     super.key,
@@ -15,6 +16,7 @@ class ConnectPage extends StatefulWidget {
     required this.connection,
     required this.initial,
     required this.onConnect,
+    this.initialError,
     this.onClose,
   });
 
@@ -23,8 +25,11 @@ class ConnectPage extends StatefulWidget {
   final ServerConnection connection;
   final String? initial;
 
-  /// Called with the normalized address when the user asks to connect.
-  final ValueChanged<Uri> onConnect;
+  /// Why the user is here, e.g. the room was deleted.
+  final String? initialError;
+
+  /// Called with the address and the room's name once the room is found.
+  final void Function(RoomAddress address, String roomName) onConnect;
   final VoidCallback? onClose;
 
   @override
@@ -33,7 +38,7 @@ class ConnectPage extends StatefulWidget {
 
 class _ConnectPageState extends State<ConnectPage> {
   late final _controller = TextEditingController(text: widget.initial ?? '');
-  String? _error;
+  late String? _error = widget.initialError;
   bool _trying = false;
 
   @override
@@ -59,17 +64,38 @@ class _ConnectPageState extends State<ConnectPage> {
     }
   }
 
-  void _submit() {
-    final uri = normalizeAddress(_controller.text);
-    if (uri == null) {
-      setState(() => _error = widget.strings.badAddress);
+  Future<void> _submit() async {
+    final s = widget.strings;
+    final text = _controller.text;
+    if (normalizeAddress(text) == null) {
+      setState(() => _error = s.badAddress);
+      return;
+    }
+    final address = RoomAddress.parse(text);
+    if (address == null) {
+      setState(() => _error = s.missingRoom);
       return;
     }
     setState(() {
       _error = null;
       _trying = true;
     });
-    widget.onConnect(uri);
+    String? error;
+    try {
+      final name = await widget.connection.lookUpRoom(address);
+      if (!mounted) return;
+      widget.onConnect(address, name);
+      return;
+    } on RoomNotFound {
+      error = s.roomNotFound;
+    } catch (_) {
+      error = s.cannotConnect;
+    }
+    if (!mounted) return;
+    setState(() {
+      _trying = false;
+      _error = error;
+    });
   }
 
   @override

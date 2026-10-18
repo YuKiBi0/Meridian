@@ -1,5 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:meridian/core/address.dart';
+import 'package:meridian/core/connection.dart';
 import 'package:meridian/core/countdown.dart';
 import 'package:meridian/core/display.dart';
 import 'package:meridian/core/format.dart';
@@ -46,10 +52,80 @@ void main() {
       expect(normalizeAddress(''), isNull);
       expect(normalizeAddress('ftp://x'), isNull);
     });
-    test('builds stream uri', () {
-      expect(streamUri(normalizeAddress('x.com/meridian')!).toString(),
-          'https://x.com/meridian/api/v1/stream?role=client');
+    test('reads the room', () {
+      const id = '0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506';
+      final a = RoomAddress.parse('x.com/meridian/?r=${id.toUpperCase()}')!;
+      expect(a.base.toString(), 'https://x.com/meridian');
+      expect(a.room, id);
+      expect(a.display, 'https://x.com/meridian?r=$id');
+      expect(RoomAddress.parse(a.display), a);
+      expect(RoomAddress.parse('x.com/meridian'), isNull);
+      expect(RoomAddress.parse('x.com/meridian?r=nope'), isNull);
+      expect(roomIdOf('x.com/meridian?r=nope'), isNull);
+      expect(normalizeAddress('x.com/meridian?r=nope').toString(), 'https://x.com/meridian');
+    });
+    test('builds uris', () {
+      final a = RoomAddress.parse('x.com/meridian?r=0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506')!;
+      expect(streamUri(a).toString(),
+          'https://x.com/meridian/api/v1/stream?role=client&r=0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506');
+      expect(roomUri(a).toString(), 'https://x.com/meridian/api/v1/rooms/0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506');
       expect(timeUri(normalizeAddress('x.com')!).toString(), 'https://x.com/api/v1/time');
+    });
+  });
+
+  group('room connection', () {
+    final a = RoomAddress.parse('x.com/meridian?r=0192f3a4-5b6c-7d8e-9fa0-b1c2d3e4f506')!;
+    const notFound = '{"error":{"code":"room_not_found","message":"房间不存在"}}';
+    const idle = '{"seq":1,"status":"idle","title":"","total_ms":0,"remaining_ms":0}';
+
+    /// A server whose stream sends [events] (raw SSE) and then stays open,
+    /// or answers 404 room_not_found when [events] is null.
+    ServerConnection serve(String? events, {String roomBody = '{"id":"x","name":"一号厅"}', int roomStatus = 200}) {
+      return ServerConnection(Countdown(), clientFactory: () => MockClient.streaming((req, _) async {
+            final path = req.url.path;
+            if (path.endsWith('/time')) return http.StreamedResponse(Stream.value(utf8.encode('{"server_time":0}')), 200);
+            if (path.contains('/rooms/')) return http.StreamedResponse(Stream.value(utf8.encode(roomBody)), roomStatus);
+            if (events == null) return http.StreamedResponse(Stream.value(utf8.encode(notFound)), 404);
+            final body = StreamController<List<int>>();
+            body.add(utf8.encode(events));
+            return http.StreamedResponse(body.stream, 200, headers: {'content-type': 'text/event-stream'});
+          }));
+    }
+
+    Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 20));
+
+    test('looks the room up', () async {
+      expect(await serve('').lookUpRoom(a), '一号厅');
+      expect(serve('', roomBody: notFound, roomStatus: 404).lookUpRoom(a), throwsA(isA<RoomNotFound>()));
+      expect(serve('', roomBody: 'nginx', roomStatus: 404).lookUpRoom(a), throwsA(isNot(isA<RoomNotFound>())));
+    });
+
+    test('follows the room name', () async {
+      final c = serve('event: room\ndata: {"id":"x","name":"二号厅"}\n\nevent: state\ndata: $idle\n\n');
+      c.connect(a, roomName: '一号厅');
+      expect(c.roomName, '一号厅');
+      await settle();
+      expect(c.roomName, '二号厅');
+      expect(c.everConnected, isTrue);
+      c.dispose();
+    });
+
+    test('stops when the room is deleted', () async {
+      final c = serve('event: state\ndata: $idle\n\nevent: room_deleted\ndata: {"id":"x"}\n\n');
+      c.connect(a);
+      await settle();
+      expect(c.roomGone, isTrue);
+      expect(c.address, isNull);
+      expect(c.link, Link.disconnected);
+      c.dispose();
+    });
+
+    test('stops when the room is already gone', () async {
+      final c = serve(null);
+      c.connect(a);
+      await settle();
+      expect(c.roomGone, isTrue);
+      c.dispose();
     });
   });
 

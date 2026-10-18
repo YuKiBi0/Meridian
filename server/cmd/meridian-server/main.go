@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/YuKiBi0/Meridian/server/internal/api"
+	"github.com/YuKiBi0/Meridian/server/internal/rooms"
 	"github.com/YuKiBi0/Meridian/server/internal/store"
 	"github.com/YuKiBi0/Meridian/server/internal/stream"
-	"github.com/YuKiBi0/Meridian/server/internal/timer"
 	"github.com/YuKiBi0/Meridian/server/internal/web"
 )
 
@@ -69,16 +69,6 @@ func loadConfig() (config, error) {
 	return c, nil
 }
 
-// listener connects the engine to the SSE hub and the database.
-type listener struct {
-	hub     *stream.Hub
-	persist *store.Persister
-}
-
-func (l listener) State(s timer.State)       { l.hub.Publish(stream.Encode("state", s.Seq, s)) }
-func (l listener) Reminder(f timer.Fired)    { l.hub.Publish(stream.Encode("reminder", -1, f)) }
-func (l listener) Persist(p timer.Persisted) { l.persist.Save(p) }
-
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	if len(os.Args) > 1 {
@@ -120,17 +110,13 @@ func run() error {
 	}
 	defer st.Close()
 
-	t := timer.New()
-	if p, ok, err := st.LoadTimer(ctx); err != nil {
-		return fmt.Errorf("load timer: %w", err)
-	} else if ok {
-		t = timer.Restore(p, time.Now())
-		slog.Info("restored timer", "status", t.Status(), "seq", t.Seq())
-	}
-
 	hub := stream.NewHub()
 	persister := store.NewPersister(st)
-	engine := timer.NewEngine(t, listener{hub: hub, persist: persister})
+	rm, err := rooms.Load(ctx, st, hub, persister)
+	if err != nil {
+		return fmt.Errorf("load rooms: %w", err)
+	}
+	slog.Info("restored rooms", "count", rm.Len())
 
 	srv := api.New(api.Config{
 		BasePath:     cfg.basePath,
@@ -138,7 +124,7 @@ func run() error {
 		CookieSecure: cfg.cookieSecure,
 		Trusted:      cfg.trusted,
 		Console:      web.FS(),
-	}, engine, hub, st)
+	}, rm, hub, st)
 
 	httpSrv := &http.Server{
 		Addr:              cfg.addr,
@@ -161,7 +147,7 @@ func run() error {
 	slog.Info("shutting down")
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	engine.Close()
+	rm.Close()
 	// SSE connections never finish on their own; Close ends them.
 	httpSrv.Close()
 	persister.Close(shutCtx)

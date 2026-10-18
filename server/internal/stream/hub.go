@@ -20,6 +20,7 @@ const bufferSize = 32
 type Sub struct {
 	C    chan []byte
 	role string
+	room string // "" for a console looking at the room list
 }
 
 // Hub broadcasts pre-encoded events. A subscriber that falls behind by
@@ -34,11 +35,12 @@ func NewHub() *Hub {
 	return &Hub{subs: map[*Sub]struct{}{}}
 }
 
-func (h *Hub) Subscribe(role string) *Sub {
+// Subscribe adds a subscriber to room ("" is the room list, consoles only).
+func (h *Hub) Subscribe(role, room string) *Sub {
 	if role != RoleConsole {
 		role = RoleClient
 	}
-	s := &Sub{C: make(chan []byte, bufferSize), role: role}
+	s := &Sub{C: make(chan []byte, bufferSize), role: role, room: room}
 	h.mu.Lock()
 	h.subs[s] = struct{}{}
 	h.mu.Unlock()
@@ -48,50 +50,68 @@ func (h *Hub) Subscribe(role string) *Sub {
 func (h *Hub) Unsubscribe(s *Sub) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.drop(s)
+}
+
+func (h *Hub) drop(s *Sub) {
 	if _, ok := h.subs[s]; ok {
 		delete(h.subs, s)
 		close(s.C)
 	}
 }
 
-// Publish sends msg to every subscriber without blocking.
-func (h *Hub) Publish(msg []byte) {
+// send must be called with mu held.
+func (h *Hub) send(s *Sub, msg []byte) {
+	select {
+	case s.C <- msg:
+	default:
+		h.drop(s)
+	}
+}
+
+// Publish sends msg to every subscriber of room without blocking.
+func (h *Hub) Publish(room string, msg []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for s := range h.subs {
-		select {
-		case s.C <- msg:
-		default:
-			delete(h.subs, s)
-			close(s.C)
+		if s.room == room {
+			h.send(s, msg)
 		}
 	}
 }
 
-// PublishRole sends msg only to subscribers of role.
+// PublishRole sends msg to subscribers of role in every room and the list.
 func (h *Hub) PublishRole(role string, msg []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for s := range h.subs {
-		if s.role != role {
-			continue
-		}
-		select {
-		case s.C <- msg:
-		default:
-			delete(h.subs, s)
-			close(s.C)
+		if s.role == role {
+			h.send(s, msg)
 		}
 	}
 }
 
-// Counts returns the number of subscribers per role.
-func (h *Hub) Counts() map[string]int {
+// CloseRoom sends msg to every subscriber of room, then disconnects them.
+func (h *Hub) CloseRoom(room string, msg []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for s := range h.subs {
+		if s.room == room {
+			h.send(s, msg)
+			h.drop(s)
+		}
+	}
+}
+
+// Counts returns the number of subscribers of room per role.
+func (h *Hub) Counts(room string) map[string]int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	c := map[string]int{RoleClient: 0, RoleConsole: 0}
 	for s := range h.subs {
-		c[s.role]++
+		if s.room == room {
+			c[s.role]++
+		}
 	}
 	return c
 }
