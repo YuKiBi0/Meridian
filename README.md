@@ -148,7 +148,8 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 | [部署](docs/DEPLOYMENT.md) | Docker Compose、nginx 反向代理、环境变量 |
 | [产品需求](docs/PRD.md) | 完整的功能需求、状态机、接口与协议、数据模型 |
 | [设计理念](docs/DESIGN.md) | 用词、配色、字体、动效与各个决定背后的理由 |
-| [开发](docs/DEVELOPMENT.md) | 本地运行、测试、构建与发布流程 |
+| [开发](docs/DEVELOPMENT.md) | 本地运行、测试与构建 |
+| [发版](docs/RELEASING.md) | 版本号与节气代号、发版脚本、部署与回滚 |
 
 ## 名字
 
