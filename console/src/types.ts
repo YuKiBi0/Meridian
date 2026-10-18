@@ -15,6 +15,8 @@ export interface TimerState {
   on_expire: OnExpire
   marks_ms: number[]
   reminders: RunReminder[]
+  /** seq at which the reminders were last set; sent back when editing them. */
+  reminders_seq: number
   server_time: number
   last_end: { run_id: string; at: number } | null
 }

@@ -219,6 +219,7 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 - 提醒点 > 当前剩余的（已经过去的）记为已触发，不会再提醒；
 - 提醒点 ≤ 当前剩余的，到点时提醒（包括原本已触发、被改到剩余之内的）；
 - 提醒的 `id` 保留与否不影响上述判断。
+- 多个控制台同时编辑：保存时带上打开编辑时的 `reminders_seq`。期间别人已改过提醒（或开始了新一轮）则拒绝保存，编辑框提示「提醒刚被其他控制台改过」并可「载入最新」。暂停、加减时间等其他操作不影响正在编辑的提醒。
 
 ### 5.5 到时行为
 
@@ -319,6 +320,7 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 | CON-14 | 中英文界面，跟随浏览器语言，可手动切换 | P1 |
 | CON-15 | 浅色 / 深色，跟随系统 | P1 |
 | CON-16 | 预设导入导出 | P2 |
+| CON-18 | 多控制台同步：状态经同一 SSE 流实时同步；预设变动经 `presets` 事件同步到所有控制台；同时编辑提醒时后保存者被拒绝并提示载入最新（5.4.1） | P1 |
 | CON-17 | 当前一轮的提醒列表：显示提醒点、内容，已过的标「已过」；running / paused 时可「编辑提醒」，增删改后立即生效（5.4.1） | P0 |
 
 ---
@@ -418,7 +420,7 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 
 ### 9.1 SSE：`GET {base}/api/v1/stream`
 
-查询参数：`role=client|console`（只用于在线统计，默认 `client`）。
+查询参数：`role=client|console`（用于在线统计，以及只发给控制台的 `presets` 事件；默认 `client`）。
 
 响应头：
 
@@ -451,6 +453,7 @@ data: {"seq":42,"run_id":"r_01JB8K...","status":"running","title":"第二场 · 
 | `on_expire` | `stop` \| `overtime` | |
 | `marks_ms` | int[] | 各提醒点（用于 CLI-24 画刻痕） |
 | `reminders` | object[] | 当前一轮的提醒（Reminder 加 `fired`：已触发或已跳过），按提醒点从大到小；控制台用来展示和编辑，客户端可忽略 |
+| `reminders_seq` | int | 提醒最后一次被设置（开始一轮或修改提醒）时的 `seq`；修改提醒时回传，防止互相覆盖（5.4.1）。服务重启后重置 |
 | `server_time` | int | 服务端发送时刻 |
 | `last_end` | object \| null | `{"run_id":"…","at":1792224000123}`，仅在 `idle` 且刚结束时出现 |
 
@@ -460,6 +463,8 @@ data: {"seq":42,"run_id":"r_01JB8K...","status":"running","title":"第二场 · 
 event: reminder
 data: {"seq":42,"run_id":"r_01JB8K...","reminder_id":"m_2","at_ms":300000,"title":"第二场 · 路演","text":"还剩 5 分钟，请准备收尾","duration_ms":8000,"sticky":false}
 ```
+
+**`presets`**：预设有增删改或调整顺序。只发给 `role=console` 的订阅者，数据为 `{}`（流不需要登录，所以不带预设内容）；控制台收到后重新拉取列表。断线重连后控制台也会重新拉取一次。
 
 **`sync`**：心跳，每 15 秒一次，不带 `id`。
 
@@ -493,7 +498,7 @@ data: {"seq":42,"status":"running","remaining_ms":740118,"overtime_ms":0,"server
 | POST | `/admin/timer/end` | 同上 | |
 | POST | `/admin/timer/extend` | `{"delta_ms":300000,"mode":"remaining"\|"total","if_seq":42}` | |
 | POST | `/admin/timer/reduce` | 同上，`delta_ms` 为要减少的量（正数） | 见 5.4 |
-| PUT | `/admin/timer/reminders` | `{"reminders":[…],"if_seq":42}` | 替换当前一轮的提醒，见 5.4.1 |
+| PUT | `/admin/timer/reminders` | `{"reminders":[…],"if_reminders_seq":40}` | 替换当前一轮的提醒，见 5.4.1；`if_reminders_seq` 与当前 `reminders_seq` 不符时返回 `409 reminders_conflict` |
 | GET | `/admin/presets` | — | 按排序返回 |
 | POST | `/admin/presets` | Preset（无 id） | 新建 |
 | PUT | `/admin/presets/{id}` | Preset | 修改 |

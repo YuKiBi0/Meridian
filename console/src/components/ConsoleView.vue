@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api, ApiError } from '../api'
 import { lang, setLang, t } from '../i18n'
-import { applyState, connect, connection, live } from '../live'
+import { applyState, connect, connection, live, onPresetsChanged } from '../live'
 import type { ExtendMode, Preset, Reminder, TimerConfig, TimerState } from '../types'
 import ConfirmDialog from './ConfirmDialog.vue'
 import EditorDialog from './EditorDialog.vue'
@@ -86,14 +86,15 @@ function adjust(mode: ExtendMode, ms: number) {
   confirm.value = { message: t.value.confirmCutToZero, danger: true, confirmText: t.value.endEarly, action: go }
 }
 
-async function saveReminders(reminders: Reminder[]) {
+async function saveReminders(reminders: Reminder[], remindersSeq: number) {
   try {
-    applyState(await api.setReminders(reminders, seq.value))
+    applyState(await api.setReminders(reminders, remindersSeq))
     editingReminders.value = false
     say(t.value.remindersSaved)
   } catch (e) {
     const err = e as ApiError
     if (err.status === 400) remindersRef.value?.setError(err.message)
+    else if (err.code === 'reminders_conflict') remindersRef.value?.setError(t.value.remindersConflict)
     else {
       if (err.code === 'invalid_state') editingReminders.value = false
       fail(e)
@@ -181,7 +182,9 @@ function onKey(e: KeyboardEvent) {
 }
 
 let clientsTimer: number | undefined
+let offPresets: (() => void) | undefined
 onMounted(() => {
+  offPresets = onPresetsChanged(loadPresets)
   connect()
   loadPresets()
   pollClients()
@@ -189,6 +192,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKey)
 })
 onUnmounted(() => {
+  offPresets?.()
   clearInterval(clientsTimer)
   window.removeEventListener('keydown', onKey)
 })
