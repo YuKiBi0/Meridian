@@ -58,6 +58,32 @@ void main() {
     expect(problems, isEmpty, reason: problems.join('\n'));
   });
 
+  // The popup style must keep the transparent background: where Flutter
+  // paints nothing, the screen shows what is behind the window.
+  testWidgets('transparent where nothing is painted', (t) async {
+    await t.pumpWidget(const Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox.square(dimension: 20, child: ColoredBox(color: Color(0xFFFF0000))),
+    ));
+    Future<int> pixel(int x, int y) async => (await _ch.invokeMethod<int>('screenPixel', {'x': x, 'y': y}))!;
+    Future<void> settle() async {
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await t.pump();
+    }
+
+    await _ch.invokeMethod('setBounds', _rect(100, 100, 200, 200));
+    await settle();
+    final red = await pixel(105, 105);
+    final through = await pixel(250, 250);
+    await _ch.invokeMethod('setBounds', _rect(700, 500, 200, 200));
+    await settle();
+    final behind = await pixel(250, 250);
+    // ignore: avoid_print
+    print('red ${red.toRadixString(16)}, through ${through.toRadixString(16)}, behind ${behind.toRadixString(16)}');
+    expect(red, 0x0000FF, reason: 'opaque content is drawn (0x00BBGGRR)');
+    expect(through, behind, reason: 'transparent area shows what is behind');
+  });
+
   testWidgets('window follows style switches and panels', (t) async {
     // An address nobody listens on: the app shows its views, waiting.
     SharedPreferences.setMockInitialValues({'address': 'http://127.0.0.1:9/meridian', 'style': 'ring'});

@@ -84,6 +84,18 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
 
+  // A popup without caption or sizing frame: Windows keeps captioned
+  // windows at least ~136x39 px whatever WM_GETMINMAXINFO says, and a bar
+  // must be able to be 4 px thin.
+  HWND hwnd = GetHandle();
+  LONG style = GetWindowLong(hwnd, GWL_STYLE);
+  style &= ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX |
+             WS_MAXIMIZEBOX);
+  SetWindowLong(hwnd, GWL_STYLE, style | WS_POPUP);
+  SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                   SWP_FRAMECHANGED);
+
   RECT frame = GetClientArea();
 
   // The size here must match the window dimensions to avoid unnecessary surface
@@ -223,6 +235,12 @@ void FlutterWindow::HandleWindowCall(
     HWND view = flutter_controller_->view()->GetNativeWindow();
     GetClientRect(view, &r);
     result->Success(EncodableValue(RectMap(r)));
+  } else if (method == "screenPixel") {
+    // Composited screen colour as 0x00BBGGRR, for tests of transparency.
+    HDC dc = GetDC(nullptr);
+    COLORREF c = GetPixel(dc, ArgInt(a, "x"), ArgInt(a, "y"));
+    ReleaseDC(nullptr, dc);
+    result->Success(EncodableValue(static_cast<int>(c)));
   } else if (method == "scale") {
     result->Success(EncodableValue(GetDpiForWindow(hwnd) / 96.0));
   } else {
@@ -243,8 +261,8 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
-  // Windows keeps captioned windows at least ~136x39 px; a 4 px bar must be
-  // able to be 4 px. Handled before plugins, which would keep the default.
+  // No minimum size either (see OnCreate). Handled before plugins, which
+  // would keep the default.
   if (message == WM_GETMINMAXINFO) {
     auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
     info->ptMinTrackSize = POINT{1, 1};
