@@ -30,7 +30,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test test/core_test.dart test/geometry_test.dart test/colors_test.dart
       - name: Window integration test
-        run: flutter test integration_test/window_test.dart -d windows
+        run: flutter test integration_test -d windows
       - run: flutter build windows --release
 
       - name: Package

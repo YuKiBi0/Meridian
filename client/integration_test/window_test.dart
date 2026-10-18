@@ -31,14 +31,18 @@ void main() {
       (_rect(100, 100, 144, 144), null), // card gone
       (_rect(100, 100, 900, 40), null), // ruler
     ];
+    final problems = <String>[];
     for (final (bounds, region) in steps) {
       await _ch.invokeMethod('setBounds', {...bounds, 'region': ?region});
       await Future<void>.delayed(const Duration(milliseconds: 400));
       await t.pump();
       final want = Size(bounds['w']!.toDouble(), bounds['h']!.toDouble());
-      expect(await _call('bounds'), want, reason: 'window for $bounds');
-      expect(await _call('contentBounds'), want, reason: 'view window for $bounds');
-      expect(t.binding.platformDispatcher.views.first.physicalSize, want, reason: 'Flutter metrics for $bounds');
+      final got = [await _call('bounds'), await _call('contentBounds'), t.binding.platformDispatcher.views.first.physicalSize];
+      final line = '$bounds region=${region != null}: want $want, window/view/metrics $got';
+      // ignore: avoid_print
+      print(line);
+      if (got.any((s) => s != want)) problems.add(line);
     }
+    expect(problems, isEmpty, reason: problems.join('\n'));
   });
 }
