@@ -3,6 +3,7 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
 
 #include <memory>
 
@@ -28,6 +29,18 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // "meridian/window": window placement that never steals focus.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> window_channel_;
+  void HandleWindowCall(
+      const flutter::MethodCall<flutter::EncodableValue>& call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void UpdateLayered();
+
+  RECT last_bounds_{};
+  bool has_bounds_ = false;
+  bool click_through_ = false;
+  double opacity_ = 1.0;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
