@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:meridian/window/window_controller.dart';
 
 const _ch = MethodChannel('meridian/window');
 
@@ -19,6 +20,8 @@ void main() {
   // Style switches resize the window several times in a row; the Flutter
   // view must follow every time, with or without a region.
   testWidgets('the view follows native setBounds', (t) async {
+    // Same frameless setup as the app.
+    await WindowController().init('Meridian test');
     await t.pumpWidget(const ColoredBox(color: Color(0xFF111418)));
     final steps = <(Map<String, int>, List<Map<String, int>>?)>[
       (_rect(100, 100, 144, 144), null), // ring
