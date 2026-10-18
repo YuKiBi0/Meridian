@@ -17,6 +17,17 @@ const now = ref(performance.now())
 export const recentlyEnded = ref(false)
 
 let source: EventSource | null = null
+let everOpened = false
+const presetListeners = new Set<() => void>()
+
+/**
+ * Calls fn whenever another console (or this one) changes the presets, and
+ * after a reconnect, since events sent while offline are lost.
+ */
+export function onPresetsChanged(fn: () => void): () => void {
+  presetListeners.add(fn)
+  return () => presetListeners.delete(fn)
+}
 let retry = 1000
 let endedTimer: number | undefined
 
@@ -40,7 +51,10 @@ export function connect() {
   source.onopen = () => {
     connection.value = 'connected'
     retry = 1000
+    if (everOpened) presetListeners.forEach((fn) => fn())
+    everOpened = true
   }
+  source.addEventListener('presets', () => presetListeners.forEach((fn) => fn()))
   source.addEventListener('state', (e) => accept(JSON.parse((e as MessageEvent).data)))
   source.addEventListener('sync', (e) => {
     const s: SyncEvent = JSON.parse((e as MessageEvent).data)

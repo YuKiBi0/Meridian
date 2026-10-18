@@ -130,6 +130,8 @@ func (s *Server) opError(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusBadRequest, "bad_request", ve.Msg)
 	case errors.Is(err, timer.ErrInvalidState):
 		writeErr(w, http.StatusConflict, "invalid_state", "当前状态不能这样操作")
+	case errors.Is(err, timer.ErrRemindersConflict):
+		writeErr(w, http.StatusConflict, "reminders_conflict", "提醒已被其他控制台改动")
 	case errors.Is(err, timer.ErrSeqConflict):
 		writeErr(w, http.StatusConflict, "seq_conflict", "状态已被其他控制台改动")
 	case errors.Is(err, store.ErrNotFound):
@@ -364,13 +366,14 @@ func (s *Server) reduce(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setReminders(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Reminders []timer.Reminder `json:"reminders"`
-		IfSeq     *int64           `json:"if_seq"`
+		Reminders      []timer.Reminder `json:"reminders"`
+		IfSeq          *int64           `json:"if_seq"`
+		IfRemindersSeq *int64           `json:"if_reminders_seq"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
-	st, err := s.engine.SetReminders(body.Reminders, body.IfSeq)
+	st, err := s.engine.SetReminders(body.Reminders, body.IfSeq, body.IfRemindersSeq)
 	if err != nil {
 		s.opError(w, err)
 		return
@@ -380,6 +383,12 @@ func (s *Server) setReminders(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- presets ----
+
+// presetsChanged tells every console to reload its preset list. It carries
+// no data: the stream is public and presets are admin-only.
+func (s *Server) presetsChanged() {
+	s.hub.PublishRole(stream.RoleConsole, stream.Encode("presets", -1, struct{}{}))
+}
 
 func validPreset(p *store.Preset) error {
 	p.Name = strings.TrimSpace(p.Name)
@@ -413,6 +422,7 @@ func (s *Server) createPreset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "preset.create", map[string]any{"id": p.ID, "name": p.Name}, nil)
+	s.presetsChanged()
 	writeJSON(w, http.StatusCreated, p)
 }
 
@@ -432,6 +442,7 @@ func (s *Server) updatePreset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "preset.update", map[string]any{"id": p.ID, "name": p.Name}, nil)
+	s.presetsChanged()
 	writeJSON(w, http.StatusOK, p)
 }
 
@@ -442,6 +453,7 @@ func (s *Server) deletePreset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "preset.delete", map[string]any{"id": id}, nil)
+	s.presetsChanged()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -457,6 +469,7 @@ func (s *Server) reorderPresets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "preset.reorder", nil, nil)
+	s.presetsChanged()
 	w.WriteHeader(http.StatusNoContent)
 }
 

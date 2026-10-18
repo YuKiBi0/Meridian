@@ -60,6 +60,7 @@ func (t *Timer) Persist() Persisted {
 func Restore(p Persisted, now time.Time) *Timer {
 	t := New()
 	t.seq = p.Seq + 1
+	t.remSeq = t.seq // not persisted: editors open across a restart must reload
 	if p.Status == Idle || p.Status == "" {
 		return t
 	}

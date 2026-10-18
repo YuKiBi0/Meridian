@@ -68,6 +68,23 @@ func (h *Hub) Publish(msg []byte) {
 	}
 }
 
+// PublishRole sends msg only to subscribers of role.
+func (h *Hub) PublishRole(role string, msg []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for s := range h.subs {
+		if s.role != role {
+			continue
+		}
+		select {
+		case s.C <- msg:
+		default:
+			delete(h.subs, s)
+			close(s.C)
+		}
+	}
+}
+
 // Counts returns the number of subscribers per role.
 func (h *Hub) Counts() map[string]int {
 	h.mu.Lock()
