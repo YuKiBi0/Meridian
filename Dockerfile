@@ -15,7 +15,7 @@ COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ ./
 COPY --from=console /src/console/dist/ ./internal/web/dist/
-ARG VERSION=dev
+ARG VERSION=1.0.0
 RUN CGO_ENABLED=0 go build -trimpath -tags timetzdata \
       -ldflags "-s -w -X main.version=${VERSION}" \
       -o /out/meridian-server ./cmd/meridian-server
