@@ -1,0 +1,208 @@
+/* Tokens from DESIGN §5.1. Ink and paper, grays, one accent. */
+:root {
+  --bg: #f5f5f2;
+  --fg: #111418;
+  --fg-muted: #6b6f74;
+  --line: #d6d6d1;
+  --track: #e4e4df;
+  --surface: #fbfbf9;
+  --accent: #e0a94a;
+  --alert: #c8452f;
+  --on-fg: #f5f5f2;
+
+  --r-sm: 4px;
+  --r-md: 8px;
+  --font: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, 'PingFang SC',
+    'Microsoft YaHei UI', 'Noto Sans CJK SC', sans-serif;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418;
+    --fg: #f5f5f2;
+    --fg-muted: #8d9197;
+    --line: #2e333a;
+    --track: #22262c;
+    --surface: #171a1f;
+    --on-fg: #111418;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms linear, border-color 120ms linear;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--fg-muted);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--on-fg);
+}
+
+button.primary:hover:not(:disabled) {
+  border-color: var(--fg);
+  opacity: 0.88;
+}
+
+button.danger {
+  background: var(--alert);
+  border-color: var(--alert);
+  color: #f5f5f2;
+}
+
+button.quiet {
+  border-color: transparent;
+  padding: 0 8px;
+  color: var(--fg-muted);
+}
+
+button.quiet:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: transparent;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
+input,
+select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  min-width: 0;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--fg-muted);
+  outline: none;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--fg-muted);
+  margin-top: 4px;
+}
+
+.error {
+  font-size: 13px;
+  color: var(--alert);
+  margin-top: 4px;
+}
+
+/* Dialogs */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(17 20 24 / 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+  animation: fade 160ms linear;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 24px;
+}
+
+.dialog h2 {
+  margin: 0 0 16px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.dialog .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

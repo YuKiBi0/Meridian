@@ -1,0 +1,200 @@
+// Interface strings. Every word comes from DESIGN §3.4; Chinese and
+// English never mix on one screen.
+import { ref } from 'vue'
+
+const zh = {
+  appTitle: '子午 · 控制台',
+  brand: '子午',
+  consoleName: '控制台',
+  adminToken: '管理口令',
+  enter: '进入',
+  wrongToken: '口令不对',
+  tooMany: '尝试太多次了，一分钟后再试',
+  logout: '退出',
+  logs: '操作记录',
+  online: '在线',
+  connected: '已连接',
+  connecting: '连接中',
+  disconnected: '未连接',
+  notStarted: '未开始',
+  running: '进行中',
+  paused: '已暂停',
+  timesUp: '时间到',
+  ended: '已结束',
+  total: '总时长',
+  new: '新建',
+  start: '开始',
+  pause: '暂停',
+  resume: '继续',
+  end: '结束',
+  extendRemaining: '延长剩余时间',
+  extendTotal: '延长总时长',
+  custom: '自定义',
+  minutes: (n: number) => `+${n} 分`,
+  presets: '预设',
+  noPresets: '还没有预设',
+  edit: '编辑',
+  delete: '删除',
+  save: '保存',
+  savePreset: '保存预设',
+  cancel: '取消',
+  confirm: '确定',
+  close: '关闭',
+  name: '名称',
+  title: '标题',
+  titleHint: '显示在每个窗口上，可不填',
+  duration: '总时长',
+  durationHint: '15 表示 15 分钟，1:30 表示 1 分 30 秒',
+  onExpire: '时间到后',
+  expireStop: '停在零',
+  expireOvertime: '计超时',
+  reminders: '提醒',
+  addReminder: '添加提醒',
+  reminderAt: '剩余',
+  message: '提示内容',
+  showFor: '显示',
+  seconds: (n: number) => `${n} 秒`,
+  sticky: '需手动关闭',
+  remove: '移除',
+  confirmEnd: '结束后无法继续。确定结束？',
+  confirmReplace: '当前计时会被结束。确定开始？',
+  confirmDelete: (name: string) => `删除预设「${name}」？`,
+  seqConflict: '状态已被其他控制台改动，已刷新',
+  invalidState: '当前状态不能这样操作',
+  networkError: '连不上服务器',
+  errDuration: '时长格式不对',
+  errDurationRange: '总时长需在 1 秒到 24 小时之间',
+  errName: '需要名称',
+  errReminderText: '提示内容不能为空',
+  errReminderAt: '提醒时间需小于总时长',
+  errReminderDup: '同一时间点只能有一个提醒',
+  extendBy: '延长多久',
+  saved: '已保存',
+  shortcuts: '空格 暂停/继续 · N 新建',
+  logAction: {
+    login: '登录',
+    start: '开始',
+    pause: '暂停',
+    resume: '继续',
+    end: '结束',
+    extend: '延长',
+    'preset.create': '新建预设',
+    'preset.update': '修改预设',
+    'preset.delete': '删除预设',
+    'preset.reorder': '调整预设顺序',
+  } as Record<string, string>,
+  noLogs: '还没有记录',
+}
+
+type Dict = typeof zh
+
+const en: Dict = {
+  appTitle: 'Meridian · Console',
+  brand: 'Meridian',
+  consoleName: 'Console',
+  adminToken: 'Admin token',
+  enter: 'Enter',
+  wrongToken: 'Wrong token',
+  tooMany: 'Too many attempts. Try again in a minute.',
+  logout: 'Log out',
+  logs: 'Activity',
+  online: 'Online',
+  connected: 'Connected',
+  connecting: 'Connecting',
+  disconnected: 'Disconnected',
+  notStarted: 'Not started',
+  running: 'Running',
+  paused: 'Paused',
+  timesUp: "Time's up",
+  ended: 'Ended',
+  total: 'Total',
+  new: 'New',
+  start: 'Start',
+  pause: 'Pause',
+  resume: 'Resume',
+  end: 'End',
+  extendRemaining: 'Extend remaining',
+  extendTotal: 'Extend total',
+  custom: 'Custom',
+  minutes: (n: number) => `+${n} min`,
+  presets: 'Presets',
+  noPresets: 'No presets yet',
+  edit: 'Edit',
+  delete: 'Delete',
+  save: 'Save',
+  savePreset: 'Save preset',
+  cancel: 'Cancel',
+  confirm: 'OK',
+  close: 'Close',
+  name: 'Name',
+  title: 'Title',
+  titleHint: 'Shown on every window. Optional.',
+  duration: 'Total',
+  durationHint: '15 means 15 minutes, 1:30 means 1 min 30 s',
+  onExpire: "When time's up",
+  expireStop: 'Stop at zero',
+  expireOvertime: 'Count overtime',
+  reminders: 'Reminders',
+  addReminder: 'Add reminder',
+  reminderAt: 'Remaining',
+  message: 'Message',
+  showFor: 'Show',
+  seconds: (n: number) => `${n} s`,
+  sticky: 'Until dismissed',
+  remove: 'Remove',
+  confirmEnd: 'An ended countdown cannot resume. End it?',
+  confirmReplace: 'The current countdown will end. Start?',
+  confirmDelete: (name: string) => `Delete preset "${name}"?`,
+  seqConflict: 'Another console changed the countdown. Refreshed.',
+  invalidState: "Can't do that right now",
+  networkError: "Can't reach the server",
+  errDuration: 'Not a valid duration',
+  errDurationRange: 'Total must be between 1 second and 24 hours',
+  errName: 'Name is required',
+  errReminderText: 'Message is required',
+  errReminderAt: 'Reminder must be before the total',
+  errReminderDup: 'Only one reminder per point in time',
+  extendBy: 'Extend by',
+  saved: 'Saved',
+  shortcuts: 'Space pause/resume · N new',
+  logAction: {
+    login: 'Log in',
+    start: 'Start',
+    pause: 'Pause',
+    resume: 'Resume',
+    end: 'End',
+    extend: 'Extend',
+    'preset.create': 'New preset',
+    'preset.update': 'Edit preset',
+    'preset.delete': 'Delete preset',
+    'preset.reorder': 'Reorder presets',
+  },
+  noLogs: 'Nothing yet',
+}
+
+export type Lang = 'zh' | 'en'
+
+function initialLang(): Lang {
+  try {
+    const saved = localStorage.getItem('meridian.lang')
+    if (saved === 'zh' || saved === 'en') return saved
+  } catch {
+    /* storage unavailable */
+  }
+  return navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+}
+
+export const lang = ref<Lang>(initialLang())
+export const t = ref<Dict>(lang.value === 'zh' ? zh : en)
+
+export function setLang(l: Lang) {
+  lang.value = l
+  t.value = l === 'zh' ? zh : en
+  document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en'
+  document.title = t.value.appTitle
+  try {
+    localStorage.setItem('meridian.lang', l)
+  } catch {
+    /* storage unavailable */
+  }
+}
