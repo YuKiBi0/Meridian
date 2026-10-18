@@ -159,16 +159,16 @@ void FlutterWindow::HandleWindowCall(
            ArgInt(a, "y") + ArgInt(a, "h")};
     last_bounds_ = r;
     has_bounds_ = true;
-    SetWindowPos(hwnd, nullptr, r.left, r.top, r.right - r.left,
-                 r.bottom - r.top,
-                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     // Optional visible region (window-relative physical rects). Outside it
     // the window neither paints nor takes clicks, so a view and a distant
     // reminder card can share one window without blocking what is between.
-    HRGN region = nullptr;
-    auto it = a.find(EncodableValue("region"));
-    if (it != a.end()) {
-      if (const auto* rects = std::get_if<EncodableList>(&it->second)) {
+    // Only touched when a region is wanted or has to be removed, and before
+    // the move, so plain resizes behave exactly as without regions.
+    const EncodableValue* rv = Arg(a, "region");
+    const auto* rects = rv ? std::get_if<EncodableList>(rv) : nullptr;
+    if (rects || has_region_) {
+      HRGN region = nullptr;
+      if (rects) {
         region = CreateRectRgn(0, 0, 0, 0);
         for (const auto& v : *rects) {
           const auto* m = std::get_if<EncodableMap>(&v);
@@ -180,9 +180,16 @@ void FlutterWindow::HandleWindowCall(
           DeleteObject(part);
         }
       }
+      // The system owns the region after this call.
+      SetWindowRgn(hwnd, region, FALSE);
+      has_region_ = region != nullptr;
     }
-    // The system owns the region after this call.
-    SetWindowRgn(hwnd, region, TRUE);
+    SetWindowPos(hwnd, nullptr, r.left, r.top, r.right - r.left,
+                 r.bottom - r.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    if (rects) {
+      RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    }
     result->Success();
   } else if (method == "setTopmost") {
     // Re-asserting HWND_TOPMOST lifts the window above other topmost
@@ -236,6 +243,14 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Windows keeps captioned windows at least ~136x39 px; a 4 px bar must be
+  // able to be 4 px. Handled before plugins, which would keep the default.
+  if (message == WM_GETMINMAXINFO) {
+    auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+    info->ptMinTrackSize = POINT{1, 1};
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
