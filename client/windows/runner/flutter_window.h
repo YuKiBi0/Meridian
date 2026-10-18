@@ -39,7 +39,6 @@ class FlutterWindow : public Win32Window {
 
   RECT last_bounds_{};
   bool has_bounds_ = false;
-  bool has_region_ = false;
   bool click_through_ = false;
   double opacity_ = 1.0;
 };

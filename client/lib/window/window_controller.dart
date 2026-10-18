@@ -41,7 +41,7 @@ class Monitor {
 class WindowController {
   static const _ch = MethodChannel('meridian/window');
 
-  String? _bounds;
+  Rect? _bounds;
   bool? _topmost;
   bool? _clickThrough;
   double? _opacity;
@@ -86,29 +86,18 @@ class WindowController {
     return m == null ? null : Monitor._rect(m);
   }
 
-  /// Places the window at [logical] (in [monitor]'s logical pixels). With
-  /// [region] (window-relative logical rects) only those parts are shown and
-  /// clickable.
-  Future<void> setBounds(Rect logical, Monitor monitor, {List<Rect>? region}) async {
+  /// Places the window at [logical] (in [monitor]'s logical pixels).
+  Future<void> setBounds(Rect logical, Monitor monitor) async {
     final s = monitor.scale;
-    Rect phys(Rect l) => Rect.fromLTRB(
-          (l.left * s).floorToDouble(),
-          (l.top * s).floorToDouble(),
-          (l.right * s).ceilToDouble(),
-          (l.bottom * s).ceilToDouble(),
-        );
     final r = Rect.fromLTWH(
       (logical.left * s).roundToDouble(),
       (logical.top * s).roundToDouble(),
       (logical.width * s).roundToDouble(),
       (logical.height * s).roundToDouble(),
     );
-    final rgn = region?.map(phys).toList();
-    final key = [r, ...?rgn].join(';');
-    if (key == _bounds) return;
-    _bounds = key;
-    Map<String, int> m(Rect x) => {'x': x.left.toInt(), 'y': x.top.toInt(), 'w': x.width.toInt(), 'h': x.height.toInt()};
-    await _ch.invokeMethod('setBounds', {...m(r), if (rgn != null) 'region': [for (final x in rgn) m(x)]});
+    if (r == _bounds) return;
+    _bounds = r;
+    await _ch.invokeMethod('setBounds', {'x': r.left.toInt(), 'y': r.top.toInt(), 'w': r.width.toInt(), 'h': r.height.toInt()});
   }
 
   Future<void> setTopmost(bool on, {bool force = false}) async {

@@ -84,18 +84,6 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
 
-  // A popup without caption or sizing frame: Windows keeps captioned
-  // windows at least ~136x39 px whatever WM_GETMINMAXINFO says, and a bar
-  // must be able to be 4 px thin.
-  HWND hwnd = GetHandle();
-  LONG style = GetWindowLong(hwnd, GWL_STYLE);
-  style &= ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX |
-             WS_MAXIMIZEBOX);
-  SetWindowLong(hwnd, GWL_STYLE, style | WS_POPUP);
-  SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-               SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
-                   SWP_FRAMECHANGED);
-
   RECT frame = GetClientArea();
 
   // The size here must match the window dimensions to avoid unnecessary surface
@@ -171,37 +159,9 @@ void FlutterWindow::HandleWindowCall(
            ArgInt(a, "y") + ArgInt(a, "h")};
     last_bounds_ = r;
     has_bounds_ = true;
-    // Optional visible region (window-relative physical rects). Outside it
-    // the window neither paints nor takes clicks, so a view and a distant
-    // reminder card can share one window without blocking what is between.
-    // Only touched when a region is wanted or has to be removed, and before
-    // the move, so plain resizes behave exactly as without regions.
-    const EncodableValue* rv = Arg(a, "region");
-    const auto* rects = rv ? std::get_if<EncodableList>(rv) : nullptr;
-    if (rects || has_region_) {
-      HRGN region = nullptr;
-      if (rects) {
-        region = CreateRectRgn(0, 0, 0, 0);
-        for (const auto& v : *rects) {
-          const auto* m = std::get_if<EncodableMap>(&v);
-          if (!m) continue;
-          HRGN part = CreateRectRgn(ArgInt(*m, "x"), ArgInt(*m, "y"),
-                                    ArgInt(*m, "x") + ArgInt(*m, "w"),
-                                    ArgInt(*m, "y") + ArgInt(*m, "h"));
-          CombineRgn(region, region, part, RGN_OR);
-          DeleteObject(part);
-        }
-      }
-      // The system owns the region after this call.
-      SetWindowRgn(hwnd, region, FALSE);
-      has_region_ = region != nullptr;
-    }
     SetWindowPos(hwnd, nullptr, r.left, r.top, r.right - r.left,
                  r.bottom - r.top,
                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-    if (rects) {
-      RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
-    }
     result->Success();
   } else if (method == "setTopmost") {
     // Re-asserting HWND_TOPMOST lifts the window above other topmost
@@ -229,18 +189,6 @@ void FlutterWindow::HandleWindowCall(
     RECT r{};
     GetWindowRect(hwnd, &r);
     result->Success(EncodableValue(RectMap(r)));
-  } else if (method == "contentBounds") {
-    // The Flutter view's own window, for checking it follows the frame.
-    RECT r{};
-    HWND view = flutter_controller_->view()->GetNativeWindow();
-    GetClientRect(view, &r);
-    result->Success(EncodableValue(RectMap(r)));
-  } else if (method == "screenPixel") {
-    // Composited screen colour as 0x00BBGGRR, for tests of transparency.
-    HDC dc = GetDC(nullptr);
-    COLORREF c = GetPixel(dc, ArgInt(a, "x"), ArgInt(a, "y"));
-    ReleaseDC(nullptr, dc);
-    result->Success(EncodableValue(static_cast<int>(c)));
   } else if (method == "scale") {
     result->Success(EncodableValue(GetDpiForWindow(hwnd) / 96.0));
   } else {
@@ -261,14 +209,6 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
-  // No minimum size either (see OnCreate). Handled before plugins, which
-  // would keep the default.
-  if (message == WM_GETMINMAXINFO) {
-    auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
-    info->ptMinTrackSize = POINT{1, 1};
-    return 0;
-  }
-
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

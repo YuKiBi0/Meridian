@@ -50,8 +50,6 @@ class Strings {
     required this.launchAtStartup,
     required this.appearance,
     required this.themeNames,
-    required this.toastPosition,
-    required this.toastPositionNames,
     required this.progressColor,
     required this.accentNames,
     required this.customColor,
@@ -105,8 +103,6 @@ class Strings {
   final String launchAtStartup;
   final String appearance;
   final Map<ThemeChoice, String> themeNames;
-  final String toastPosition;
-  final Map<ToastPosition, String> toastPositionNames;
   final String progressColor;
   final Map<AccentPreset, String> accentNames;
   final String customColor;
@@ -187,14 +183,6 @@ class Strings {
     launchAtStartup: '开机启动',
     appearance: '外观',
     themeNames: {ThemeChoice.system: '跟随系统', ThemeChoice.light: '浅色', ThemeChoice.dark: '深色'},
-    toastPosition: '提醒卡片位置',
-    toastPositionNames: {
-      ToastPosition.topRight: '右上角',
-      ToastPosition.topLeft: '左上角',
-      ToastPosition.bottomLeft: '左下角',
-      ToastPosition.bottomRight: '右下角',
-      ToastPosition.followView: '跟随计时器',
-    },
     progressColor: '进度颜色',
     accentNames: {
       AccentPreset.amber: '琥珀',
@@ -274,14 +262,6 @@ class Strings {
     launchAtStartup: 'Launch at startup',
     appearance: 'Appearance',
     themeNames: {ThemeChoice.system: 'System', ThemeChoice.light: 'Light', ThemeChoice.dark: 'Dark'},
-    toastPosition: 'Reminder position',
-    toastPositionNames: {
-      ToastPosition.topRight: 'Top right',
-      ToastPosition.topLeft: 'Top left',
-      ToastPosition.bottomLeft: 'Bottom left',
-      ToastPosition.bottomRight: 'Bottom right',
-      ToastPosition.followView: 'Next to timer',
-    },
     progressColor: 'Progress colour',
     accentNames: {
       AccentPreset.amber: 'Amber',
