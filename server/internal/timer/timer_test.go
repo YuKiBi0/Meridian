@@ -168,7 +168,7 @@ func TestRemindersFireOnceAndRearm(t *testing.T) {
 	}
 	// Extending above the reminder point re-arms it.
 	tm.Extend(2*time.Minute, ExtendRemaining, at(6*time.Minute)) // remaining 6m
-	f, _ = tm.Advance(at(7 * time.Minute))                        // remaining 5m
+	f, _ = tm.Advance(at(7 * time.Minute))                       // remaining 5m
 	if len(f) != 1 {
 		t.Fatalf("rearmed reminder fired %d times", len(f))
 	}
