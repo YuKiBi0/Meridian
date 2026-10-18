@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { api, ApiError } from '../api'
-import { lang, setLang, t } from '../i18n'
-import { applyState, connect, connection, live, onPresetsChanged } from '../live'
+import { api, ApiError, roomApi } from '../api'
+import { t } from '../i18n'
+import { applyState, connect, live, onPresetsChanged, onRoomGone, room } from '../live'
 import type { ExtendMode, Preset, Reminder, TimerConfig, TimerState } from '../types'
+import ClientAddress from './ClientAddress.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import EditorDialog from './EditorDialog.vue'
 import LogsDialog from './LogsDialog.vue'
@@ -12,8 +13,12 @@ import PromptDialog from './PromptDialog.vue'
 import RemindersDialog from './RemindersDialog.vue'
 import RunReminders from './RunReminders.vue'
 import StatusPanel from './StatusPanel.vue'
+import TopBar from './TopBar.vue'
 
-const emit = defineEmits<{ logout: [] }>()
+const props = defineProps<{ roomId: string }>()
+/** leave goes back to the room list, with a message to show there. */
+const emit = defineEmits<{ logout: []; leave: [notice?: string] }>()
+const rapi = roomApi(props.roomId)
 
 const presets = ref<Preset[]>([])
 const online = ref<number | null>(null)
@@ -41,6 +46,7 @@ function say(msg: string) {
 function fail(e: unknown): void {
   const err = e as ApiError
   if (err.status === 401) return emit('logout')
+  if (err.code === 'room_not_found') return emit('leave', t.value.roomDeleted)
   if (err.code === 'seq_conflict') return say(t.value.seqConflict)
   if (err.code === 'invalid_state') return say(t.value.invalidState)
   if (err.code === 'network') return say(t.value.networkError)
@@ -61,34 +67,34 @@ async function op(call: () => Promise<TimerState>): Promise<boolean> {
 
 function startWith(body: Partial<TimerConfig> & { preset_id?: string }, after?: () => void) {
   const go = async () => {
-    if (await op(() => api.start({ ...body, if_seq: seq.value }))) after?.()
+    if (await op(() => rapi.start({ ...body, if_seq: seq.value }))) after?.()
   }
   if (status.value === 'idle') return go()
   confirm.value = { message: t.value.confirmReplace, confirmText: t.value.start, action: go }
 }
 
 function toggle() {
-  if (status.value === 'running') op(() => api.pause(seq.value))
-  else if (status.value === 'paused') op(() => api.resume(seq.value))
+  if (status.value === 'running') op(() => rapi.pause(seq.value))
+  else if (status.value === 'paused') op(() => rapi.resume(seq.value))
 }
 
 function end() {
-  const go = () => op(() => api.end(seq.value))
+  const go = () => op(() => rapi.end(seq.value))
   if (status.value === 'expired') return go()
   confirm.value = { message: t.value.confirmEnd, danger: true, confirmText: t.value.end, action: go }
 }
 
 /** Adds ms (or takes it off when negative) to the remaining time or total. */
 function adjust(mode: ExtendMode, ms: number) {
-  if (ms > 0) return op(() => api.extend(ms, mode, seq.value))
-  const go = () => op(() => api.reduce(-ms, mode, seq.value))
+  if (ms > 0) return op(() => rapi.extend(ms, mode, seq.value))
+  const go = () => op(() => rapi.reduce(-ms, mode, seq.value))
   if (-ms < live.remainingMs) return go()
   confirm.value = { message: t.value.confirmCutToZero, danger: true, confirmText: t.value.endEarly, action: go }
 }
 
 async function saveReminders(reminders: Reminder[], remindersSeq: number) {
   try {
-    applyState(await api.setReminders(reminders, remindersSeq))
+    applyState(await rapi.setReminders(reminders, remindersSeq))
     editingReminders.value = false
     say(t.value.remindersSaved)
   } catch (e) {
@@ -160,11 +166,14 @@ async function logout() {
   emit('logout')
 }
 
-async function pollClients() {
+async function pollRoom() {
   try {
-    online.value = (await api.clients()).client
-  } catch {
+    const r = await rapi.get()
+    online.value = r.clients
+    room.value ??= { id: r.id, name: r.name }
+  } catch (e) {
     online.value = null
+    if ((e as ApiError).code === 'room_not_found') emit('leave', t.value.roomNotFound)
   }
 }
 
@@ -183,43 +192,34 @@ function onKey(e: KeyboardEvent) {
 
 let clientsTimer: number | undefined
 let offPresets: (() => void) | undefined
+let offGone: (() => void) | undefined
 onMounted(() => {
   offPresets = onPresetsChanged(loadPresets)
-  connect()
+  offGone = onRoomGone(() => emit('leave', t.value.roomDeleted))
+  connect(props.roomId)
   loadPresets()
-  pollClients()
-  clientsTimer = window.setInterval(pollClients, 5000)
+  pollRoom()
+  clientsTimer = window.setInterval(pollRoom, 5000)
   window.addEventListener('keydown', onKey)
 })
 onUnmounted(() => {
   offPresets?.()
+  offGone?.()
   clearInterval(clientsTimer)
   window.removeEventListener('keydown', onKey)
 })
 
-const connectionText = computed(() => t.value[connection.value])
 const QUICK = [-10, -5, -1, 1, 5, 10]
 </script>
 
 <template>
   <div class="page">
-    <header class="top">
-      <div class="brand">
-        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" />
-          <line x1="12" y1="2" x2="12" y2="22" />
-          <circle class="dot" :class="status" cx="12" cy="8.7" r="2" />
-        </svg>
-        <span>{{ t.appTitle }}</span>
-      </div>
-      <nav>
-        <span class="conn" :class="connection"><i />{{ connectionText }}</span>
-        <span v-if="online !== null" class="muted num">{{ t.online }} {{ online }}</span>
-        <button class="quiet" @click="showLogs = true">{{ t.logs }}</button>
-        <button class="quiet" @click="setLang(lang === 'zh' ? 'en' : 'zh')">{{ lang === 'zh' ? 'EN' : '中文' }}</button>
-        <button class="quiet" @click="logout">{{ t.logout }}</button>
-      </nav>
-    </header>
+    <TopBar :status="status" :online="online" @logs="showLogs = true" @logout="logout" />
+
+    <nav class="crumbs">
+      <button class="quiet back" @click="emit('leave')">← {{ t.allRooms }}</button>
+      <span class="room-name">{{ room?.name ?? '' }}</span>
+    </nav>
 
     <main class="grid">
       <div class="left">
@@ -261,6 +261,7 @@ const QUICK = [-10, -5, -1, 1, 5, 10]
       </div>
 
       <aside class="right">
+        <ClientAddress :room-id="roomId" @say="say" />
         <PresetList
           :presets="presets"
           @create="editor = {}"
@@ -313,69 +314,29 @@ const QUICK = [-10, -5, -1, 1, 5, 10]
   margin: 0 auto;
   padding: 0 16px 48px;
 }
-.top {
+.crumbs {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
+  gap: 8px;
+  padding-top: 16px;
+  min-width: 0;
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.back {
+  margin-left: -8px;
+  flex-shrink: 0;
+}
+.room-name {
+  font-size: 18px;
   font-weight: 600;
-}
-.mark {
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: var(--fg);
-  stroke-width: 2;
-}
-.mark .dot {
-  stroke: none;
-  fill: var(--fg);
-}
-.mark .dot.running {
-  fill: var(--accent);
-}
-nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 14px;
-  flex-wrap: wrap;
-}
-nav button {
-  height: 30px;
-}
-.conn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.conn i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1.5px solid var(--fg-muted);
-}
-.conn.connected i {
-  background: var(--fg);
-  border-color: var(--fg);
-}
-.conn.connecting,
-.conn.disconnected {
-  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 56px;
-  padding-top: 40px;
+  padding-top: 24px;
 }
 .controls {
   display: flex;
@@ -416,27 +377,6 @@ nav button {
   font-size: 12px;
   margin-top: 32px;
 }
-.notice {
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translate(-50%, 4px);
-  max-width: calc(100vw - 32px);
-  padding: 10px 16px;
-  background: var(--fg);
-  color: var(--on-fg);
-  border-radius: var(--r-md);
-  font-size: 14px;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity 160ms linear,
-    transform 160ms ease-out;
-}
-.notice.show {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
 @media (max-width: 860px) {
   .grid {
     grid-template-columns: 1fr;
@@ -448,9 +388,6 @@ nav button {
   }
 }
 @media (max-width: 520px) {
-  nav {
-    gap: 4px 8px;
-  }
   .extend-buttons {
     width: 100%;
     display: grid;

@@ -62,4 +62,20 @@ export interface LogEntry {
   params: Record<string, unknown>
   seq_after: number | null
   remote_ip: string
+  /** Set for room operations; room_name is empty once the room is deleted. */
+  room_id: string | null
+  room_name: string
+}
+
+export interface RoomInfo {
+  id: string
+  name: string
+}
+
+/** A room as the console lists it. */
+export interface RoomSummary extends RoomInfo {
+  created_at: string
+  /** Desktop clients in the room right now. */
+  clients: number
+  state: TimerState
 }
