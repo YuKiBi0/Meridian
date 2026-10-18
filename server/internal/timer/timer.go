@@ -16,19 +16,27 @@ type LastEnd struct {
 	At    int64  `json:"at"`
 }
 
+// ReminderState is a reminder of the current run and whether it has
+// already fired (or was skipped).
+type ReminderState struct {
+	Reminder
+	Fired bool `json:"fired"`
+}
+
 // State is the snapshot sent to subscribers (PRD §9.1).
 type State struct {
-	Seq         int64    `json:"seq"`
-	RunID       *string  `json:"run_id"`
-	Status      Status   `json:"status"`
-	Title       string   `json:"title"`
-	TotalMs     int64    `json:"total_ms"`
-	RemainingMs int64    `json:"remaining_ms"`
-	OvertimeMs  int64    `json:"overtime_ms"`
-	OnExpire    OnExpire `json:"on_expire"`
-	MarksMs     []int64  `json:"marks_ms"`
-	ServerTime  int64    `json:"server_time"`
-	LastEnd     *LastEnd `json:"last_end"`
+	Seq         int64           `json:"seq"`
+	RunID       *string         `json:"run_id"`
+	Status      Status          `json:"status"`
+	Title       string          `json:"title"`
+	TotalMs     int64           `json:"total_ms"`
+	RemainingMs int64           `json:"remaining_ms"`
+	OvertimeMs  int64           `json:"overtime_ms"`
+	OnExpire    OnExpire        `json:"on_expire"`
+	MarksMs     []int64         `json:"marks_ms"`
+	Reminders   []ReminderState `json:"reminders"`
+	ServerTime  int64           `json:"server_time"`
+	LastEnd     *LastEnd        `json:"last_end"`
 }
 
 // Sync is the heartbeat payload.
@@ -203,6 +211,70 @@ func (t *Timer) Extend(delta time.Duration, mode ExtendMode, now time.Time) erro
 	return nil
 }
 
+// Reduce takes delta off the remaining time (and the total in ExtendTotal
+// mode). Reminders jumped over are skipped, not fired; reaching zero ends the
+// run early as if time ran out, so the 0-second reminder still fires on the
+// next Advance.
+func (t *Timer) Reduce(delta time.Duration, mode ExtendMode, now time.Time) error {
+	if delta < MinExtend || delta > MaxExtend {
+		return invalid("减少时间需在 1 秒到 24 小时之间")
+	}
+	if mode != ExtendRemaining && mode != ExtendTotal {
+		return invalid("mode 只能是 remaining 或 total")
+	}
+	if t.status != Running && t.status != Paused {
+		return ErrInvalidState
+	}
+	rem := t.Remaining(now) - delta
+	if rem < 0 {
+		rem = 0
+	}
+	if mode == ExtendTotal {
+		t.total -= delta // never below rem: rem shrank by at least as much
+	}
+	if t.total < MinTotal {
+		t.total = MinTotal
+	}
+	for _, r := range t.cfg.Reminders {
+		if time.Duration(r.AtMs)*time.Millisecond > rem {
+			t.fired[r.ID] = true
+		}
+	}
+	if rem == 0 {
+		// Let Advance expire it, from paused too.
+		t.status = Running
+	}
+	if t.status == Running {
+		t.endsAt = now.Add(rem)
+	} else {
+		t.remaining = rem
+	}
+	t.seq++
+	return nil
+}
+
+// SetReminders replaces the reminders of the current run. A reminder whose
+// point has already passed counts as fired and never fires; one moved ahead
+// of the remaining time fires when it is reached.
+func (t *Timer) SetReminders(rs []Reminder, now time.Time) error {
+	if t.status != Running && t.status != Paused {
+		return ErrInvalidState
+	}
+	if err := normalizeReminders(&rs, t.total.Milliseconds()); err != nil {
+		return err
+	}
+	rem := t.Remaining(now)
+	t.cfg.Reminders = rs
+	t.fired = map[string]bool{}
+	for _, r := range rs {
+		if time.Duration(r.AtMs)*time.Millisecond > rem {
+			t.fired[r.ID] = true
+		}
+	}
+	t.seq++
+	return nil
+}
+
 // Advance settles everything that should have happened by now: it fires
 // crossed reminders and moves a finished run to Expired. changed reports
 // whether the state snapshot changed (seq was bumped).
@@ -261,6 +333,7 @@ func (t *Timer) Snapshot(now time.Time) State {
 		OvertimeMs:  t.OvertimeAt(now).Milliseconds(),
 		OnExpire:    t.cfg.OnExpire,
 		MarksMs:     []int64{},
+		Reminders:   []ReminderState{},
 		ServerTime:  now.UnixMilli(),
 	}
 	if s.OnExpire == "" {
@@ -274,6 +347,7 @@ func (t *Timer) Snapshot(now time.Time) State {
 	}
 	for _, r := range t.cfg.Reminders {
 		s.MarksMs = append(s.MarksMs, r.AtMs)
+		s.Reminders = append(s.Reminders, ReminderState{Reminder: r, Fired: t.fired[r.ID]})
 	}
 	return s
 }

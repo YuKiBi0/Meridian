@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { t } from '../i18n'
+import { buildReminders, toRows } from '../reminders'
 import { formatDuration, parseDuration } from '../time'
-import type { OnExpire, Preset, Reminder, TimerConfig } from '../types'
+import type { OnExpire, Preset, TimerConfig } from '../types'
+import ReminderFields from './ReminderFields.vue'
 
 const props = defineProps<{ preset?: Preset }>()
 const emit = defineEmits<{
@@ -11,15 +13,6 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const SHOW_OPTIONS = [5, 8, 15, 30, 60]
-
-interface Row {
-  id?: string
-  at: string
-  text: string
-  show: string // seconds, or 'sticky'
-}
-
 const editing = computed(() => !!props.preset)
 const p = props.preset
 const form = reactive({
@@ -27,22 +20,9 @@ const form = reactive({
   title: p?.title ?? '',
   duration: p ? formatDuration(p.total_ms) : '',
   onExpire: (p?.on_expire ?? 'stop') as OnExpire,
-  rows: (p?.reminders ?? []).map<Row>((r) => ({
-    id: r.id,
-    at: formatDuration(r.at_ms),
-    text: r.text,
-    show: r.sticky ? 'sticky' : String(Math.round(r.duration_ms / 1000)),
-  })),
+  rows: toRows(p?.reminders ?? []),
 })
 const errors = reactive<Record<string, string>>({})
-
-function addRow() {
-  form.rows.push({ at: '', text: '', show: '8' })
-}
-
-function removeRow(i: number) {
-  form.rows.splice(i, 1)
-}
 
 /** Validates the form; returns the config or null and fills errors. */
 function build(needName: boolean): TimerConfig | null {
@@ -52,23 +32,7 @@ function build(needName: boolean): TimerConfig | null {
   else if (total < 1000 || total > 86_400_000) errors.duration = t.value.errDurationRange
   if (needName && !form.name.trim()) errors.name = t.value.errName
 
-  const seen = new Set<number>()
-  const reminders: Reminder[] = []
-  form.rows.forEach((row, i) => {
-    const at = parseDuration(row.at)
-    if (at === null) errors[`at${i}`] = t.value.errDuration
-    else if (total !== null && at >= total) errors[`at${i}`] = t.value.errReminderAt
-    else if (seen.has(at)) errors[`at${i}`] = t.value.errReminderDup
-    if (!row.text.trim()) errors[`text${i}`] = t.value.errReminderText
-    if (at !== null) seen.add(at)
-    reminders.push({
-      id: row.id,
-      at_ms: at ?? 0,
-      text: row.text.trim(),
-      sticky: row.show === 'sticky',
-      duration_ms: row.show === 'sticky' ? 0 : Number(row.show) * 1000,
-    })
-  })
+  const reminders = buildReminders(form.rows, total, errors)
   if (Object.keys(errors).length > 0) return null
   return { title: form.title.trim(), total_ms: total!, on_expire: form.onExpire, reminders }
 }
@@ -130,28 +94,7 @@ defineExpose({ setError: (msg: string) => (errors.form = msg) })
 
       <fieldset>
         <legend>{{ t.reminders }}</legend>
-        <div v-for="(row, i) in form.rows" :key="i" class="row">
-          <div class="at">
-            <label :for="`at${i}`">{{ t.reminderAt }}</label>
-            <input :id="`at${i}`" v-model="row.at" class="num" inputmode="decimal" placeholder="5" />
-          </div>
-          <div class="text">
-            <label :for="`text${i}`">{{ t.message }}</label>
-            <input :id="`text${i}`" v-model="row.text" maxlength="80" />
-          </div>
-          <div class="show">
-            <label :for="`show${i}`">{{ t.showFor }}</label>
-            <select :id="`show${i}`" v-model="row.show">
-              <option v-for="s in SHOW_OPTIONS" :key="s" :value="String(s)">{{ t.seconds(s) }}</option>
-              <option value="sticky">{{ t.sticky }}</option>
-            </select>
-          </div>
-          <button type="button" class="quiet remove" :aria-label="t.remove" @click="removeRow(i)">×</button>
-          <div v-if="errors[`at${i}`] || errors[`text${i}`]" class="error full">
-            {{ errors[`at${i}`] || errors[`text${i}`] }}
-          </div>
-        </div>
-        <button v-if="form.rows.length < 20" type="button" class="quiet add" @click="addRow">+ {{ t.addReminder }}</button>
+        <ReminderFields :rows="form.rows" :errors="errors" />
       </fieldset>
 
       <div v-if="errors.form" class="error">{{ errors.form }}</div>
@@ -191,39 +134,5 @@ legend {
   font-size: 13px;
   color: var(--fg-muted);
   padding: 0 8px 0 0;
-}
-.row {
-  display: grid;
-  grid-template-columns: 84px 1fr 120px 32px;
-  gap: 8px;
-  align-items: end;
-  margin-bottom: 12px;
-}
-.row input,
-.row select {
-  width: 100%;
-}
-.row label {
-  font-size: 12px;
-}
-.remove {
-  height: 36px;
-  font-size: 18px;
-}
-.full {
-  grid-column: 1 / -1;
-  margin-top: 0;
-}
-.add {
-  padding-left: 0;
-}
-@media (max-width: 520px) {
-  .row {
-    grid-template-columns: 84px 1fr 32px;
-  }
-  .row .show {
-    grid-column: 1 / 3;
-    grid-row: 2;
-  }
 }
 </style>

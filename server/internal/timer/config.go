@@ -94,16 +94,22 @@ func (c *Config) Normalize() error {
 	default:
 		return invalid("on_expire 只能是 stop 或 overtime")
 	}
-	if len(c.Reminders) > MaxReminders {
+	return normalizeReminders(&c.Reminders, c.TotalMs)
+}
+
+// normalizeReminders validates rs against a run of totalMs, fills defaults
+// and sorts them by AtMs descending (the order in which they fire).
+func normalizeReminders(rs *[]Reminder, totalMs int64) error {
+	if len(*rs) > MaxReminders {
 		return invalid("提醒最多 %d 个", MaxReminders)
 	}
-	if c.Reminders == nil {
-		c.Reminders = []Reminder{}
+	if *rs == nil {
+		*rs = []Reminder{}
 	}
 	seen := map[int64]bool{}
 	ids := map[string]bool{}
-	for i := range c.Reminders {
-		r := &c.Reminders[i]
+	for i := range *rs {
+		r := &(*rs)[i]
 		r.Text = strings.TrimSpace(r.Text)
 		if n := utf8.RuneCountInString(r.Text); n == 0 || n > MaxReminderTextLen {
 			return invalid("提示内容需为 1 到 %d 字", MaxReminderTextLen)
@@ -111,7 +117,7 @@ func (c *Config) Normalize() error {
 		if strings.Count(r.Text, "\n") > 1 {
 			return invalid("提示内容最多 2 行")
 		}
-		if r.AtMs < 0 || r.AtMs >= c.TotalMs {
+		if r.AtMs < 0 || r.AtMs >= totalMs {
 			return invalid("提醒时间需小于总时长")
 		}
 		if seen[r.AtMs] {
@@ -134,8 +140,8 @@ func (c *Config) Normalize() error {
 		}
 		ids[r.ID] = true
 	}
-	sort.SliceStable(c.Reminders, func(i, j int) bool {
-		return c.Reminders[i].AtMs > c.Reminders[j].AtMs
+	sort.SliceStable(*rs, func(i, j int) bool {
+		return (*rs)[i].AtMs > (*rs)[j].AtMs
 	})
 	return nil
 }

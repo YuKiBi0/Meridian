@@ -85,6 +85,18 @@ func (e *Engine) Extend(delta time.Duration, mode ExtendMode, ifSeq *int64) (Sta
 	})
 }
 
+func (e *Engine) Reduce(delta time.Duration, mode ExtendMode, ifSeq *int64) (State, error) {
+	return e.do(ifSeq, func(now time.Time) error {
+		return e.t.Reduce(delta, mode, now)
+	})
+}
+
+func (e *Engine) SetReminders(rs []Reminder, ifSeq *int64) (State, error) {
+	return e.do(ifSeq, func(now time.Time) error {
+		return e.t.SetReminders(rs, now)
+	})
+}
+
 func (e *Engine) do(ifSeq *int64, op func(time.Time) error) (State, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()

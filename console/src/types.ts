@@ -14,6 +14,7 @@ export interface TimerState {
   overtime_ms: number
   on_expire: OnExpire
   marks_ms: number[]
+  reminders: RunReminder[]
   server_time: number
   last_end: { run_id: string; at: number } | null
 }
@@ -32,6 +33,12 @@ export interface Reminder {
   text: string
   duration_ms: number
   sticky: boolean
+}
+
+/** A reminder of the current run; fired also covers skipped ones. */
+export interface RunReminder extends Reminder {
+  id: string
+  fired: boolean
 }
 
 export interface TimerConfig {
