@@ -123,7 +123,7 @@ class Strings {
   static const zh = Strings._(
     appName: '子午',
     serverAddress: '服务器地址',
-    addressHint: 'https://showcase.rosmarinus-trinity.com/meridian',
+    addressHint: 'https://example/meridian',
     connect: '连接',
     cannotConnect: '连不上这个地址。检查地址是否正确，或服务器是否在运行。',
     badAddress: '这不是一个有效的地址。',
@@ -189,7 +189,7 @@ class Strings {
   static const en = Strings._(
     appName: 'Meridian',
     serverAddress: 'Server address',
-    addressHint: 'https://showcase.rosmarinus-trinity.com/meridian',
+    addressHint: 'https://example/meridian',
     connect: 'Connect',
     cannotConnect: "Can't reach this address. Check that it is correct and the server is running.",
     badAddress: 'This is not a valid address.',

@@ -306,7 +306,7 @@ stateDiagram-v2
 
 | 编号 | 需求 | 优先级 |
 | --- | --- | --- |
-| CLI-01 | 首次启动显示连接页：一个输入框「服务器地址」（占位文字 `https://showcase.rosmarinus-trinity.com/meridian`），一个按钮「连接」 | P0 |
+| CLI-01 | 首次启动显示连接页：一个输入框「服务器地址」（占位文字 `https://example/meridian`），一个按钮「连接」 | P0 |
 | CLI-02 | 地址规范化：缺少协议时补 `https://`；去掉末尾 `/`；若用户粘贴了完整的 `/api/v1/stream` 地址也能识别。订阅地址 = `{地址}/api/v1/stream?role=client` | P0 |
 | CLI-03 | 地址保存在本地，之后启动自动连接，不再显示连接页 | P0 |
 | CLI-04 | 断线自动重连，退避 1s → 2s → 4s … 上限 30s；连接中状态见 DESIGN 5.7 | P0 |
@@ -385,7 +385,7 @@ stateDiagram-v2
 
 ## 9. 接口与协议
 
-基础路径 `{base}` = `/meridian`。完整地址示例：`https://showcase.rosmarinus-trinity.com/meridian/api/v1/stream`。
+基础路径 `{base}` = `/meridian`。完整地址示例：`https://example/meridian/api/v1/stream`。
 
 所有时间量以毫秒整数表示，字段以 `_ms` 结尾；时间点为 Unix 毫秒。
 

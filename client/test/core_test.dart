@@ -39,8 +39,8 @@ void main() {
 
   group('address', () {
     test('normalizes', () {
-      expect(normalizeAddress('showcase.rosmarinus-trinity.com/meridian/').toString(),
-          'https://showcase.rosmarinus-trinity.com/meridian');
+      expect(normalizeAddress('example.com/meridian/').toString(),
+          'https://example.com/meridian');
       expect(normalizeAddress('https://x.com/meridian/api/v1/stream?role=client').toString(), 'https://x.com/meridian');
       expect(normalizeAddress('http://10.0.0.2:8090').toString(), 'http://10.0.0.2:8090');
       expect(normalizeAddress(''), isNull);
