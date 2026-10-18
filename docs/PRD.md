@@ -426,10 +426,9 @@ data: {"seq":42,"run_id":"r_01JB8K...","status":"running","title":"第二场 · 
 | `server_time` | int | 服务端发送时刻 |
 | `last_end` | object \| null | `{"run_id":"…","at":1792224000123}`，仅在 `idle` 且刚结束时出现 |
 
-**`reminder`**：提醒触发。
+**`reminder`**：提醒触发。不带 `id`（`id` 只用于状态版本）。
 
 ```
-id: 43
 event: reminder
 data: {"seq":42,"run_id":"r_01JB8K...","reminder_id":"m_2","at_ms":300000,"title":"第二场 · 路演","text":"还剩 5 分钟，请准备收尾","duration_ms":8000,"sticky":false}
 ```
