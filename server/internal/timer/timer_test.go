@@ -283,3 +283,127 @@ func TestRestore(t *testing.T) {
 		t.Fatalf("overtime after restore = %v", got)
 	}
 }
+
+func TestReduceRemaining(t *testing.T) {
+	tm := started(cfg(10*time.Minute,
+		Reminder{AtMs: ms(5 * time.Minute), Text: "五分钟"},
+		Reminder{AtMs: ms(2 * time.Minute), Text: "两分钟"},
+	))
+	if err := tm.Reduce(4*time.Minute, ExtendRemaining, at(time.Minute)); err != nil { // 9m -> 5m
+		t.Fatal(err)
+	}
+	s := tm.Snapshot(at(time.Minute))
+	if s.RemainingMs != ms(5*time.Minute) || s.TotalMs != ms(10*time.Minute) {
+		t.Fatalf("after reduce: %+v", s)
+	}
+	// The 5-minute point is exactly reached: it fires; nothing was jumped.
+	if f, _ := tm.Advance(at(time.Minute)); len(f) != 1 || f[0].Text != "五分钟" {
+		t.Fatalf("fired = %+v", f)
+	}
+	// Jumping over the 2-minute point skips it silently.
+	if err := tm.Reduce(4*time.Minute, ExtendRemaining, at(time.Minute)); err != nil { // 5m -> 1m
+		t.Fatal(err)
+	}
+	if f, _ := tm.Advance(at(time.Minute)); len(f) != 0 {
+		t.Fatalf("skipped reminder fired: %+v", f)
+	}
+	if !tm.Snapshot(at(time.Minute)).Reminders[1].Fired {
+		t.Fatal("skipped reminder not marked fired")
+	}
+}
+
+func TestReduceTotal(t *testing.T) {
+	tm := started(cfg(10 * time.Minute))
+	if err := tm.Reduce(3*time.Minute, ExtendTotal, at(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	s := tm.Snapshot(at(time.Minute))
+	if s.RemainingMs != ms(6*time.Minute) || s.TotalMs != ms(7*time.Minute) {
+		t.Fatalf("after reduce: %+v", s)
+	}
+}
+
+func TestReduceToZeroEndsEarly(t *testing.T) {
+	for _, paused := range []bool{false, true} {
+		c := cfg(10*time.Minute,
+			Reminder{AtMs: ms(5 * time.Minute), Text: "五分钟"},
+			Reminder{AtMs: 0, Text: "时间到", Sticky: true},
+		)
+		c.OnExpire = Overtime
+		tm := started(c)
+		if paused {
+			tm.Pause(at(time.Minute))
+		}
+		if err := tm.Reduce(20*time.Minute, ExtendRemaining, at(2*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		f, changed := tm.Advance(at(2 * time.Minute))
+		if !changed || tm.Status() != Expired {
+			t.Fatalf("paused=%v: status %s", paused, tm.Status())
+		}
+		if len(f) != 1 || f[0].Text != "时间到" {
+			t.Fatalf("paused=%v: fired = %+v", paused, f)
+		}
+		if got := tm.OvertimeAt(at(3 * time.Minute)); got != time.Minute {
+			t.Fatalf("paused=%v: overtime = %v", paused, got)
+		}
+	}
+}
+
+func TestReduceInvalid(t *testing.T) {
+	tm := New()
+	if err := tm.Reduce(time.Minute, ExtendRemaining, t0); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("idle: %v", err)
+	}
+	tm = started(cfg(time.Minute))
+	tm.Advance(at(2 * time.Minute))
+	if err := tm.Reduce(time.Second, ExtendRemaining, at(2*time.Minute)); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("expired: %v", err)
+	}
+	tm = started(cfg(time.Minute))
+	var ve *ValidationError
+	if err := tm.Reduce(0, ExtendRemaining, t0); !errors.As(err, &ve) {
+		t.Fatalf("zero delta: %v", err)
+	}
+}
+
+func TestSetReminders(t *testing.T) {
+	tm := started(cfg(10*time.Minute, Reminder{ID: "m_a", AtMs: ms(8 * time.Minute), Text: "八分钟"}))
+	if f, _ := tm.Advance(at(2 * time.Minute)); len(f) != 1 {
+		t.Fatal("first reminder did not fire")
+	}
+	seq := tm.Seq()
+	err := tm.SetReminders([]Reminder{
+		{ID: "m_a", AtMs: ms(8 * time.Minute), Text: "八分钟（改）"}, // already passed: stays fired
+		{AtMs: ms(9 * time.Minute), Text: "九分钟"},               // added in the past: never fires
+		{AtMs: ms(3 * time.Minute), Text: "三分钟"},               // ahead: fires later
+		{ID: "m_b", AtMs: ms(1 * time.Minute), Text: "一分钟", Sticky: true},
+	}, at(3*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tm.Seq() != seq+1 {
+		t.Fatalf("seq = %d", tm.Seq())
+	}
+	s := tm.Snapshot(at(3 * time.Minute))
+	if len(s.Reminders) != 4 || s.Reminders[0].AtMs != ms(9*time.Minute) || !s.Reminders[0].Fired || !s.Reminders[1].Fired || s.Reminders[2].Fired {
+		t.Fatalf("reminders = %+v", s.Reminders)
+	}
+	if len(s.MarksMs) != 4 {
+		t.Fatalf("marks = %v", s.MarksMs)
+	}
+	if f, _ := tm.Advance(at(4 * time.Minute)); len(f) != 0 {
+		t.Fatalf("past reminders fired: %+v", f)
+	}
+	if f, _ := tm.Advance(at(7 * time.Minute)); len(f) != 1 || f[0].Text != "三分钟" {
+		t.Fatalf("fired = %+v", f)
+	}
+	// Validation uses the current total.
+	var ve *ValidationError
+	if err := tm.SetReminders([]Reminder{{AtMs: ms(10 * time.Minute), Text: "x"}}, at(7*time.Minute)); !errors.As(err, &ve) {
+		t.Fatalf("at == total: %v", err)
+	}
+	if err := New().SetReminders(nil, t0); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("idle: %v", err)
+	}
+}

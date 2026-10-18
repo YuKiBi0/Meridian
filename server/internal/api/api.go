@@ -69,6 +69,8 @@ func (s *Server) Handler() http.Handler {
 	admin("POST /api/v1/admin/timer/resume", s.simpleOp("resume", s.engine.Resume))
 	admin("POST /api/v1/admin/timer/end", s.simpleOp("end", s.engine.End))
 	admin("POST /api/v1/admin/timer/extend", s.extend)
+	admin("POST /api/v1/admin/timer/reduce", s.reduce)
+	admin("PUT /api/v1/admin/timer/reminders", s.setReminders)
 	admin("GET /api/v1/admin/presets", s.listPresets)
 	admin("POST /api/v1/admin/presets", s.createPreset)
 	admin("PUT /api/v1/admin/presets/order", s.reorderPresets)
@@ -339,6 +341,41 @@ func (s *Server) extend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "extend", map[string]any{"delta_ms": body.DeltaMs, "mode": body.Mode}, &st.Seq)
+	writeJSON(w, http.StatusOK, st)
+}
+
+func (s *Server) reduce(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		DeltaMs int64            `json:"delta_ms"`
+		Mode    timer.ExtendMode `json:"mode"`
+		IfSeq   *int64           `json:"if_seq"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	st, err := s.engine.Reduce(time.Duration(body.DeltaMs)*time.Millisecond, body.Mode, body.IfSeq)
+	if err != nil {
+		s.opError(w, err)
+		return
+	}
+	s.record(r, "reduce", map[string]any{"delta_ms": body.DeltaMs, "mode": body.Mode}, &st.Seq)
+	writeJSON(w, http.StatusOK, st)
+}
+
+func (s *Server) setReminders(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Reminders []timer.Reminder `json:"reminders"`
+		IfSeq     *int64           `json:"if_seq"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	st, err := s.engine.SetReminders(body.Reminders, body.IfSeq)
+	if err != nil {
+		s.opError(w, err)
+		return
+	}
+	s.record(r, "reminders", map[string]any{"count": len(st.Reminders)}, &st.Seq)
 	writeJSON(w, http.StatusOK, st)
 }
 

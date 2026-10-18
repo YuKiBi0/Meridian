@@ -212,6 +212,26 @@ func TestTimerFlowAndStream(t *testing.T) {
 		t.Fatalf("total after extend %d", st.TotalMs)
 	}
 	next()
+	if code := call(t, c, "POST", base+"/api/v1/admin/timer/reduce", map[string]any{"delta_ms": 30000, "mode": "total"}, &st); code != 200 {
+		t.Fatalf("reduce %d", code)
+	}
+	if st.TotalMs != 31500 || st.Status != timer.Paused {
+		t.Fatalf("after reduce %+v", st)
+	}
+	next()
+	if code := call(t, c, "PUT", base+"/api/v1/admin/timer/reminders", map[string]any{
+		"reminders": []map[string]any{{"at_ms": 10000, "text": "十秒"}, {"at_ms": 40000, "text": "太晚"}},
+	}, nil); code != 400 {
+		t.Fatalf("reminder past total %d", code)
+	}
+	if code := call(t, c, "PUT", base+"/api/v1/admin/timer/reminders", map[string]any{
+		"reminders": []map[string]any{{"at_ms": 10000, "text": "十秒"}},
+	}, &st); code != 200 || len(st.Reminders) != 1 || st.Reminders[0].Fired || st.Reminders[0].DurationMs != 8000 {
+		t.Fatalf("set reminders %d %+v", code, st.Reminders)
+	}
+	if name, m := next(); name != "state" || len(m["reminders"].([]any)) != 1 {
+		t.Fatalf("after reminders %s %v", name, m)
+	}
 	if code := call(t, c, "POST", base+"/api/v1/admin/timer/resume", nil, nil); code != 200 {
 		t.Fatalf("resume %d", code)
 	}
