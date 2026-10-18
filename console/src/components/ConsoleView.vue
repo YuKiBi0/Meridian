@@ -3,12 +3,14 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api, ApiError } from '../api'
 import { lang, setLang, t } from '../i18n'
 import { applyState, connect, connection, live } from '../live'
-import type { ExtendMode, Preset, TimerConfig, TimerState } from '../types'
+import type { ExtendMode, Preset, Reminder, TimerConfig, TimerState } from '../types'
 import ConfirmDialog from './ConfirmDialog.vue'
 import EditorDialog from './EditorDialog.vue'
 import LogsDialog from './LogsDialog.vue'
 import PresetList from './PresetList.vue'
 import PromptDialog from './PromptDialog.vue'
+import RemindersDialog from './RemindersDialog.vue'
+import RunReminders from './RunReminders.vue'
 import StatusPanel from './StatusPanel.vue'
 
 const emit = defineEmits<{ logout: [] }>()
@@ -21,10 +23,13 @@ const editorRef = ref<InstanceType<typeof EditorDialog> | null>(null)
 const confirm = ref<{ message: string; danger?: boolean; confirmText?: string; action: () => void } | null>(null)
 const prompt = ref<ExtendMode | null>(null)
 const showLogs = ref(false)
+const editingReminders = ref(false)
+const remindersRef = ref<InstanceType<typeof RemindersDialog> | null>(null)
 
 const status = computed(() => live.state?.status ?? 'idle')
 const seq = computed(() => live.state?.seq)
-const anyDialog = computed(() => !!(editor.value || confirm.value || prompt.value || showLogs.value))
+const active = computed(() => status.value === 'running' || status.value === 'paused')
+const anyDialog = computed(() => !!(editor.value || confirm.value || prompt.value || showLogs.value || editingReminders.value))
 
 let noticeTimer: number | undefined
 function say(msg: string) {
@@ -73,8 +78,27 @@ function end() {
   confirm.value = { message: t.value.confirmEnd, danger: true, confirmText: t.value.end, action: go }
 }
 
-function extend(mode: ExtendMode, ms: number) {
-  op(() => api.extend(ms, mode, seq.value))
+/** Adds ms (or takes it off when negative) to the remaining time or total. */
+function adjust(mode: ExtendMode, ms: number) {
+  if (ms > 0) return op(() => api.extend(ms, mode, seq.value))
+  const go = () => op(() => api.reduce(-ms, mode, seq.value))
+  if (-ms < live.remainingMs) return go()
+  confirm.value = { message: t.value.confirmCutToZero, danger: true, confirmText: t.value.endEarly, action: go }
+}
+
+async function saveReminders(reminders: Reminder[]) {
+  try {
+    applyState(await api.setReminders(reminders, seq.value))
+    editingReminders.value = false
+    say(t.value.remindersSaved)
+  } catch (e) {
+    const err = e as ApiError
+    if (err.status === 400) remindersRef.value?.setError(err.message)
+    else {
+      if (err.code === 'invalid_state') editingReminders.value = false
+      fail(e)
+    }
+  }
 }
 
 // ---- presets ----
@@ -170,7 +194,7 @@ onUnmounted(() => {
 })
 
 const connectionText = computed(() => t.value[connection.value])
-const QUICK = [1, 5, 10]
+const QUICK = [-10, -5, -1, 1, 5, 10]
 </script>
 
 <template>
@@ -213,13 +237,21 @@ const QUICK = [1, 5, 10]
           <div v-for="mode in ['remaining', 'total'] as const" :key="mode" class="extend-row">
             <span class="extend-label">{{ mode === 'remaining' ? t.extendRemaining : t.extendTotal }}</span>
             <div class="extend-buttons">
-              <button v-for="m in QUICK" :key="m" class="num" :disabled="status === 'idle'" @click="extend(mode, m * 60_000)">
+              <button
+                v-for="m in QUICK"
+                :key="m"
+                class="num"
+                :disabled="m < 0 ? !active : status === 'idle'"
+                @click="adjust(mode, m * 60_000)"
+              >
                 {{ t.minutes(m) }}
               </button>
               <button :disabled="status === 'idle'" @click="prompt = mode">{{ t.custom }}</button>
             </div>
           </div>
         </div>
+
+        <RunReminders @edit="editingReminders = true" />
 
         <p class="muted shortcuts">{{ t.shortcuts }}</p>
       </div>
@@ -249,8 +281,15 @@ const QUICK = [1, 5, 10]
     <PromptDialog
       v-if="prompt"
       :title="prompt === 'remaining' ? t.extendRemaining : t.extendTotal"
+      :can-reduce="active"
       @cancel="prompt = null"
-      @submit="(ms) => (extend(prompt!, ms), (prompt = null))"
+      @submit="(ms) => (adjust(prompt!, ms), (prompt = null))"
+    />
+    <RemindersDialog
+      v-if="editingReminders"
+      ref="remindersRef"
+      @cancel="editingReminders = false"
+      @save="saveReminders"
     />
     <ConfirmDialog
       v-if="confirm"
@@ -412,6 +451,9 @@ nav button {
     width: 100%;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
+  }
+  .extend-buttons button:last-child {
+    grid-column: span 2;
   }
   .extend-buttons button {
     padding: 0 4px;

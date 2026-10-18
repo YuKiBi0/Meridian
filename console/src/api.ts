@@ -1,6 +1,6 @@
 // Admin REST client. URLs are relative to the page, so the console works
 // under any base path.
-import type { ExtendMode, LogEntry, Preset, TimerConfig, TimerState } from './types'
+import type { ExtendMode, LogEntry, Preset, Reminder, TimerConfig, TimerState } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -47,6 +47,10 @@ export const api = {
   end: (if_seq?: number) => request<TimerState>('POST', `${admin}/timer/end`, { if_seq }),
   extend: (delta_ms: number, mode: ExtendMode, if_seq?: number) =>
     request<TimerState>('POST', `${admin}/timer/extend`, { delta_ms, mode, if_seq }),
+  reduce: (delta_ms: number, mode: ExtendMode, if_seq?: number) =>
+    request<TimerState>('POST', `${admin}/timer/reduce`, { delta_ms, mode, if_seq }),
+  setReminders: (reminders: Reminder[], if_seq?: number) =>
+    request<TimerState>('PUT', `${admin}/timer/reminders`, { reminders, if_seq }),
 
   presets: () => request<Preset[]>('GET', `${admin}/presets`),
   createPreset: (p: Omit<Preset, 'id'>) => request<Preset>('POST', `${admin}/presets`, p),
