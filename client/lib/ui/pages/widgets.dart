@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../colors.dart';
 import '../theme.dart';
 
 /// Frame for the panel pages (connect, settings, about): a drag handle
@@ -47,7 +48,7 @@ class Panel extends StatelessWidget {
 
 /// The product mark: ring, vertical line, a dot one third down (DESIGN §4.4).
 class Mark extends StatelessWidget {
-  const Mark({super.key, required this.size, this.dot = Palette.accent});
+  const Mark({super.key, required this.size, this.dot = defaultAccent});
 
   final double size;
   final Color dot;

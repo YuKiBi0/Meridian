@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../core/display.dart';
+import 'colors.dart';
 
 @immutable
 class Palette {
@@ -15,6 +16,7 @@ class Palette {
     required this.track,
     required this.surface,
     required this.brightness,
+    this.accent = defaultAccent,
   });
 
   final Color bg;
@@ -25,7 +27,10 @@ class Palette {
   final Color surface;
   final Brightness brightness;
 
-  static const accent = Color(0xFFE0A94A);
+  /// Fill colour of a running countdown; amber unless the user picked
+  /// another (DESIGN §5.1).
+  final Color accent;
+
   static const alert = Color(0xFFC8452F);
 
   static const light = Palette(
@@ -47,6 +52,17 @@ class Palette {
     surface: Color(0xFF171A1F),
     brightness: Brightness.dark,
   );
+
+  Palette withAccent(Color c) => Palette(
+        bg: bg,
+        fg: fg,
+        fgMuted: fgMuted,
+        line: line,
+        track: track,
+        surface: surface,
+        brightness: brightness,
+        accent: c,
+      );
 
   /// Digits colour for a tone. Amber is never used for text (DESIGN §5.2).
   Color digits(Tone t) => switch (t) {

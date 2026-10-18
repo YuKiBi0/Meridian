@@ -5,6 +5,7 @@ import 'dart:io';
 
 import '../core/display.dart';
 import '../settings.dart';
+import 'colors.dart';
 
 class Strings {
   const Strings._({
@@ -49,6 +50,10 @@ class Strings {
     required this.launchAtStartup,
     required this.appearance,
     required this.themeNames,
+    required this.progressColor,
+    required this.accentNames,
+    required this.customColor,
+    required this.badHex,
     required this.language,
     required this.langNames,
     required this.connection,
@@ -98,6 +103,10 @@ class Strings {
   final String launchAtStartup;
   final String appearance;
   final Map<ThemeChoice, String> themeNames;
+  final String progressColor;
+  final Map<AccentPreset, String> accentNames;
+  final String customColor;
+  final String badHex;
   final String language;
   final Map<LangChoice, String> langNames;
   final String connection;
@@ -174,6 +183,19 @@ class Strings {
     launchAtStartup: '开机启动',
     appearance: '外观',
     themeNames: {ThemeChoice.system: '跟随系统', ThemeChoice.light: '浅色', ThemeChoice.dark: '深色'},
+    progressColor: '进度颜色',
+    accentNames: {
+      AccentPreset.amber: '琥珀',
+      AccentPreset.pine: '松绿',
+      AccentPreset.celadon: '青瓷',
+      AccentPreset.sky: '天青',
+      AccentPreset.indigo: '靛蓝',
+      AccentPreset.wisteria: '藤紫',
+      AccentPreset.rouge: '胭脂',
+      AccentPreset.moss: '苔绿',
+    },
+    customColor: '自定义',
+    badHex: '请输入 6 位十六进制颜色，如 #3A7BD5',
     language: '语言',
     langNames: {LangChoice.system: '跟随系统', LangChoice.zh: '中文', LangChoice.en: 'English'},
     connection: '连接',
@@ -240,6 +262,19 @@ class Strings {
     launchAtStartup: 'Launch at startup',
     appearance: 'Appearance',
     themeNames: {ThemeChoice.system: 'System', ThemeChoice.light: 'Light', ThemeChoice.dark: 'Dark'},
+    progressColor: 'Progress colour',
+    accentNames: {
+      AccentPreset.amber: 'Amber',
+      AccentPreset.pine: 'Pine',
+      AccentPreset.celadon: 'Celadon',
+      AccentPreset.sky: 'Sky',
+      AccentPreset.indigo: 'Indigo',
+      AccentPreset.wisteria: 'Wisteria',
+      AccentPreset.rouge: 'Rouge',
+      AccentPreset.moss: 'Moss',
+    },
+    customColor: 'Custom',
+    badHex: 'Enter a 6-digit hex colour, e.g. #3A7BD5',
     language: 'Language',
     langNames: {LangChoice.system: 'System', LangChoice.zh: '中文', LangChoice.en: 'English'},
     connection: 'Connection',

@@ -4,6 +4,8 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'ui/colors.dart';
+
 enum ViewStyle { bar, ring, digits, ruler }
 
 /// Where a style sits on the screen.
@@ -92,6 +94,9 @@ class Settings extends ChangeNotifier {
   bool clickThrough = false;
   double opacity = 1;
   ThemeChoice theme = ThemeChoice.system;
+
+  /// Progress fill colour as opaque ARGB (DESIGN §5.1).
+  int accentColor = defaultAccent.toARGB32();
   LangChoice lang = LangChoice.system;
   bool launchAtStartup = false;
 
@@ -120,6 +125,7 @@ class Settings extends ChangeNotifier {
     clickThrough = p.getBool('clickThrough') ?? clickThrough;
     opacity = (p.getDouble('opacity') ?? opacity).clamp(0.4, 1.0);
     theme = _enum(ThemeChoice.values, p.getString('theme'), theme);
+    accentColor = 0xFF000000 | (p.getInt('accentColor') ?? accentColor);
     lang = _enum(LangChoice.values, p.getString('lang'), lang);
     launchAtStartup = p.getBool('launchAtStartup') ?? launchAtStartup;
   }
@@ -164,6 +170,7 @@ class Settings extends ChangeNotifier {
     p.setBool('clickThrough', clickThrough);
     p.setDouble('opacity', opacity);
     p.setString('theme', theme.name);
+    p.setInt('accentColor', accentColor);
     p.setString('lang', lang.name);
     p.setBool('launchAtStartup', launchAtStartup);
   }
