@@ -34,7 +34,7 @@ import 'tray.dart';
 enum AppMode { connect, view, settings, about }
 
 const _panelSizes = {
-  AppMode.connect: Size(420, 300),
+  AppMode.connect: Size(560, 340),
   AppMode.settings: Size(420, 600),
   AppMode.about: Size(420, 440),
 };
@@ -516,6 +516,7 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
           initialError: _addressError,
           onConnect: _connect,
           onClose: _canLeaveConnect ? _closePanel : null,
+          onQuit: _quit,
         ),
       AppMode.settings => SettingsPage(
           palette: p,

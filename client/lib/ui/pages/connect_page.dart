@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/address.dart';
 import '../../core/connection.dart';
@@ -16,6 +17,7 @@ class ConnectPage extends StatefulWidget {
     required this.connection,
     required this.initial,
     required this.onConnect,
+    required this.onQuit,
     this.initialError,
     this.onClose,
   });
@@ -30,7 +32,11 @@ class ConnectPage extends StatefulWidget {
 
   /// Called with the address and the room's name once the room is found.
   final void Function(RoomAddress address, String roomName) onConnect;
+
+  /// Back to the view; null when there is no room to go back to, and the
+  /// header offers Quit instead.
   final VoidCallback? onClose;
+  final VoidCallback onQuit;
 
   @override
   State<ConnectPage> createState() => _ConnectPageState();
@@ -105,16 +111,22 @@ class _ConnectPageState extends State<ConnectPage> {
     return Panel(
       palette: p,
       title: s.appName,
-      onClose: widget.onClose,
-      closeLabel: s.close,
+      onClose: widget.onClose ?? widget.onQuit,
+      closeLabel: widget.onClose == null ? s.quit : s.close,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(s.serverAddress, style: textStyle(12, p.fgMuted)),
           const SizedBox(height: 6),
+          // Wraps, so a long address shows in full and can be checked.
           TextField(
             controller: _controller,
             autofocus: true,
+            minLines: 2,
+            maxLines: 3,
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.go,
+            inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[\r\n]'))],
             style: textStyle(14, p.fg),
             decoration: inputDecoration(p, s.addressHint),
             onSubmitted: (_) => _submit(),
