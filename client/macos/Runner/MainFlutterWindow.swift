@@ -28,6 +28,10 @@ class MainFlutterWindow: NSPanel {
   override var canBecomeMain: Bool { !noActivate }
 
   override func awakeFromNib() {
+    // To AppKit a panel-only app looks windowless, and macOS would quietly
+    // end it once it is in the background.
+    ProcessInfo.processInfo.disableAutomaticTermination("Shows a countdown")
+
     let flutterViewController = FlutterViewController()
     flutterViewController.backgroundColor = .clear
     self.contentViewController = flutterViewController

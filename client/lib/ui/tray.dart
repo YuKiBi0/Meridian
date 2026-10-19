@@ -62,18 +62,24 @@ class Tray {
     await trayManager.setIcon(path);
   }
 
-  /// trayManager.setIcon only takes bundled assets on macOS, so this sends
-  /// the drawn icon the way it does (tray_manager 0.5, TrayManagerPlugin.swift).
+  /// The bundled PNG, or one drawn in the progress colour. trayManager.setIcon
+  /// only takes bundled assets on macOS, so this sends the image the way it
+  /// does (tray_manager 0.5, TrayManagerPlugin.swift).
   Future<void> _setMenuBarIcon(int request, TrayDot dot, Brightness brightness, Color accent) async {
-    final p = brightness == Brightness.dark ? Palette.dark : Palette.light;
-    final key = '${dot.name}:${p.fg.toARGB32()}:${accent.toARGB32()}';
+    final theme = brightness == Brightness.dark ? 'paper' : 'ink';
+    final custom = dot == TrayDot.running && accent != defaultAccent;
+    final key = '${dot.name}_$theme${custom ? ':${accent.toARGB32()}' : ''}';
     if (key == _icon) return;
-    final png = await switch (dot) {
-      TrayDot.hollow => menuBarIcon(p.fg, p.fg, hole: p.bg),
-      TrayDot.solid => menuBarIcon(p.fg, p.fg),
-      TrayDot.running => menuBarIcon(p.fg, accent),
-      TrayDot.alert => menuBarIcon(p.fg, Palette.alert),
-    };
+    Uint8List? png;
+    if (custom) {
+      try {
+        final p = brightness == Brightness.dark ? Palette.dark : Palette.light;
+        png = await menuBarIcon(p.fg, accent);
+      } catch (_) {
+        // Keep the bundled amber icon.
+      }
+    }
+    png ??= (await rootBundle.load('assets/tray/${dot.name}_$theme.png')).buffer.asUint8List();
     if (request != _iconRequest) return; // superseded
     _icon = key;
     await const MethodChannel('tray_manager').invokeMethod('setIcon', {

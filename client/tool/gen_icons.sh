@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Generates tray icons (assets/tray/*.ico) and the Windows and macOS app
-# icons from the mark described in DESIGN §4.4. Needs rsvg-convert and
-# ImageMagick. The macOS menu bar icon is drawn at runtime (tray_icon.dart).
+# Generates tray icons (assets/tray/*.ico for Windows, *.png at 36 px for
+# the macOS menu bar) and the Windows and macOS app icons from the mark
+# described in DESIGN §4.4. Needs rsvg-convert and ImageMagick.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 tmp=$(mktemp -d)
@@ -44,6 +44,7 @@ for theme in ink paper; do
   tray_svg "$body" "$ALERT" "$ALERT" > "$tmp/alert.svg"
   for state in hollow solid running alert; do
     make_ico "$tmp/$state.svg" "assets/tray/${state}_${theme}.ico" 16 20 24 32 40 48
+    rsvg-convert -w 36 -h 36 "$tmp/$state.svg" -o "assets/tray/${state}_${theme}.png"
   done
 done
 

@@ -81,7 +81,7 @@ void main() {
     });
 
     test('draws the macOS menu bar icon as a 36 px PNG', () async {
-      final png = await menuBarIcon(const Color(0xFF111418), const Color(0xFF111418), hole: const Color(0xFFF5F5F2));
+      final png = await menuBarIcon(const Color(0xFF111418), const Color(0xFF4A6FA5));
       expect(png.sublist(1, 4), 'PNG'.codeUnits);
       final header = ByteData.sublistView(png);
       expect([header.getUint32(16), header.getUint32(20)], [36, 36]);
