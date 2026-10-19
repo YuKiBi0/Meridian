@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Generates tray icons (assets/tray/*.ico) and the Windows app icon from the
-# mark described in DESIGN §4.4. Needs rsvg-convert and ImageMagick.
+# Generates tray icons (assets/tray/*.ico) and the Windows and macOS app
+# icons from the mark described in DESIGN §4.4. Needs rsvg-convert and
+# ImageMagick. The macOS menu bar icon is drawn at runtime (tray_icon.dart).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 tmp=$(mktemp -d)
@@ -57,4 +58,19 @@ cat > "$tmp/app.svg" <<SVG
 SVG
 make_ico "$tmp/app.svg" windows/runner/resources/app_icon.ico 16 24 32 48 64 128 256
 rsvg-convert -w 256 -h 256 "$tmp/app.svg" -o assets/app_icon.png
+# macOS app icon: the same tile on Apple's grid, 824 of 1024 with margins
+# for the system shadow.
+cat > "$tmp/mac.svg" <<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="$PAPER" stroke="#D6D6D1" stroke-width="4"/>
+  <g transform="translate(100 100) scale(34.333)">
+    <circle cx="12" cy="12" r="7.5" stroke="$INK" stroke-width="1.6"/>
+    <line x1="12" y1="3.5" x2="12" y2="20.5" stroke="$INK" stroke-width="1.6"/>
+    <circle cx="12" cy="9.2" r="1.8" fill="$ACCENT"/>
+  </g>
+</svg>
+SVG
+for s in 16 32 64 128 256 512 1024; do
+  rsvg-convert -w $s -h $s "$tmp/mac.svg" -o "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_$s.png"
+done
 echo "icons generated"

@@ -231,6 +231,14 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
   }
 
   Future<void> _applyLaunchAtStartup() async {
+    if (Platform.isMacOS) {
+      try {
+        await _win.setLaunchAtLogin(_s.launchAtStartup);
+      } catch (_) {
+        // Before macOS 13, or refused; leave it.
+      }
+      return;
+    }
     if (!Platform.isWindows) return;
     try {
       launchAtStartup.setup(appName: 'Meridian', appPath: Platform.resolvedExecutable);
@@ -323,7 +331,13 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
   bool get _draggable => _mode == AppMode.view && (_s.style == ViewStyle.ring || _s.style == ViewStyle.digits);
 
   @override
-  void onWindowMoved() => _afterDrag();
+  void onWindowMoved() {
+    if (!Platform.isMacOS) _afterDrag();
+  }
+
+  Future<void> _drag() async {
+    if (await _win.startDragging()) _afterDrag();
+  }
 
   Future<void> _afterDrag() async {
     if (!_draggable || _layout == null) return;
@@ -466,7 +480,7 @@ class _MeridianAppState extends State<MeridianApp> with WindowListener, TrayList
         rect: layout.view,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanStart: _draggable ? (_) => _win.startDragging() : null,
+          onPanStart: _draggable ? (_) => _drag() : null,
           onSecondaryTapUp: (_) => _tray.popUp(),
           onDoubleTap: () => _openPanel(AppMode.settings),
           child: _styleView(model, p),
