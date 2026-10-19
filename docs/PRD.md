@@ -718,7 +718,7 @@ location ^~ /meridian/ {
 ### 11.4 发布
 
 - 服务端：`docker compose -f deploy/docker-compose.yml up -d --build`。
-- 客户端：GitHub Actions 在 Windows runner 上 `flutter build windows`，产出便携 zip（P0）与安装包（Inno Setup，P1）；在 macOS runner 上 `flutter build macos`，本地签名（ad hoc）后打包为 DMG（P0）。都挂到 GitHub Release。
+- 客户端：GitHub Actions 在 Windows runner 上 `flutter build windows`，产出便携 zip（P0）与安装包（Inno Setup，P1）；在 macOS runner 上 `flutter build macos`，本地签名（ad hoc）后打包为 DMG（P0）。都挂到 GitHub Release。macOS 流水线自 v1.2.0 起只手动运行，不随每次发布构建。
 
 ---
 

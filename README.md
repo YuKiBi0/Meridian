@@ -9,7 +9,7 @@
 一个自部署的倒计时同步工具。<br>
 在网页上开始一次倒计时，每一台电脑的屏幕边缘都会同时出现同一个剩余时间。
 
-[![Release](https://img.shields.io/github/v/release/YuKiBi0/Meridian?label=release&color=111418)](https://github.com/YuKiBi0/Meridian/releases/latest) [![ci](https://github.com/YuKiBi0/Meridian/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/ci.yml) [![client-windows](https://github.com/YuKiBi0/Meridian/actions/workflows/client-windows.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/client-windows.yml) [![client-macos](https://github.com/YuKiBi0/Meridian/actions/workflows/client-macos.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/client-macos.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-E0A94A)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/YuKiBi0/Meridian?label=release&color=111418)](https://github.com/YuKiBi0/Meridian/releases/latest) [![ci](https://github.com/YuKiBi0/Meridian/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/ci.yml) [![client-windows](https://github.com/YuKiBi0/Meridian/actions/workflows/client-windows.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/client-windows.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-E0A94A)](LICENSE)
 
 [下载客户端](https://github.com/YuKiBi0/Meridian/releases/latest) · [部署服务](docs/DEPLOYMENT.md) · [产品需求](docs/PRD.md) · [设计理念](docs/DESIGN.md) · [参与开发](docs/DEVELOPMENT.md)
 
@@ -74,7 +74,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 | 系统 | 下载 | 安装 |
 | --- | --- | --- |
 | Windows 10 1809+ / 11（x64） | `Meridian-windows-x64.zip` | 解压后运行 `meridian.exe` |
-| macOS 12+（Intel 与 Apple 芯片） | `Meridian-macos.dmg` | 拖进「应用程序」；第一次打开需要手动放行，见 **[Mac 安装说明](docs/INSTALL-macOS.md)** |
+| macOS 12+（Intel 与 Apple 芯片） | `Meridian-macos.dmg`，目前在 [v1.2.0](https://github.com/YuKiBi0/Meridian/releases/tag/v1.2.0)（Mac 包不随每次发布构建） | 拖进「应用程序」；第一次打开需要手动放行，见 **[Mac 安装说明](docs/INSTALL-macOS.md)** |
 
 ## 控制台
 
