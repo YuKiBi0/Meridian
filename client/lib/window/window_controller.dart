@@ -1,15 +1,18 @@
 /// Talks to the native "meridian/window" channel in the Windows runner
-/// (windows/runner/flutter_window.cpp). Placement there never activates
+/// (windows/runner/flutter_window.cpp) and the macOS one
+/// (macos/Runner/MainFlutterWindow.swift). Placement there never activates
 /// the window, so re-asserting "always on top" does not steal focus from
 /// whatever the user is working in.
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// One monitor. Rects are in physical pixels; [scale] is its DPI scale.
+/// macOS reports points with a scale of 1.
 class Monitor {
   const Monitor({required this.id, required this.primary, required this.scale, required this.work});
 
@@ -50,6 +53,13 @@ class WindowController {
 
   Future<void> init(String title) async {
     await windowManager.ensureInitialized();
+    if (Platform.isMacOS) {
+      // The runner already made the window borderless and clear, and
+      // window_manager's title bar calls expect a titled window.
+      await windowManager.setTitle(title);
+      await windowManager.show();
+      return;
+    }
     const options = WindowOptions(
       size: Size(420, 320),
       center: true,
@@ -125,17 +135,35 @@ class WindowController {
     await _ch.invokeMethod('setNoActivate', {'on': on});
   }
 
+  /// macOS: the app lives in the menu bar and never shows in the Dock.
   Future<void> setSkipTaskbar(bool on) async {
-    if (on == _skipTaskbar) return;
+    if (Platform.isMacOS || on == _skipTaskbar) return;
     _skipTaskbar = on;
     await windowManager.setSkipTaskbar(on);
   }
 
   Future<void> setTitle(String title) => windowManager.setTitle(title);
 
-  Future<void> startDragging() => windowManager.startDragging();
+  /// Windows reports the end of a drag as a window move. macOS reports
+  /// every move, so there this completes when the mouse is released and
+  /// returns true.
+  Future<bool> startDragging() async {
+    if (!Platform.isMacOS) {
+      await windowManager.startDragging();
+      return false;
+    }
+    await _ch.invokeMethod('startDragging');
+    return true;
+  }
 
-  Future<void> focus() => windowManager.focus();
+  Future<void> focus() => Platform.isMacOS ? _ch.invokeMethod('focus') : windowManager.focus();
+
+  /// macOS login item (macOS 13+). Windows uses launch_at_startup instead.
+  Future<void> setLaunchAtLogin(bool on) async {
+    if (await _ch.invokeMethod<bool>('launchAtLogin') != on) {
+      await _ch.invokeMethod('setLaunchAtLogin', {'on': on});
+    }
+  }
 
   Future<void> quit() => windowManager.destroy();
 }

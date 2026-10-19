@@ -1,8 +1,10 @@
-// Runs on Windows only: flutter test integration_test -d windows
+// Runs on the desktop: flutter test integration_test -d windows (or -d macos)
 //
 // Drives the real app through style and placement switches and the settings
 // panel, and checks every time that the window lands where the layout says
 // and that Flutter's view follows it.
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -44,7 +46,9 @@ void main() {
       final b = (await _ch.invokeMapMethod<String, Object?>('bounds'))!;
       final got = Rect.fromLTWH((b['x'] as int).toDouble(), (b['y'] as int).toDouble(), (b['w'] as int).toDouble(),
           (b['h'] as int).toDouble());
-      final metrics = t.binding.platformDispatcher.views.first.physicalSize;
+      // macOS bounds are in points, like its logical pixels.
+      final view = t.binding.platformDispatcher.views.first;
+      final metrics = Platform.isMacOS ? view.physicalSize / view.devicePixelRatio : view.physicalSize;
       final line = '$step: want $want, window $got, view $metrics';
       // ignore: avoid_print
       print(line);
