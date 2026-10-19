@@ -1,0 +1,35 @@
+子午 Meridian · macOS 安装
+
+1. 把「Meridian」拖到右边的「应用程序」文件夹。
+2. 打开「应用程序」，双击 Meridian。
+   第一次会提示“无法验证开发者”或“未打开 Meridian”，点「完成」或「好」关掉提示。
+   这是因为子午没有购买苹果开发者签名，不是病毒。
+3. 打开「系统设置」→「隐私与安全性」，滚到最下面，
+   看到“已阻止 Meridian……”，点「仍要打开」，再输入开机密码。
+4. 回到「应用程序」再双击 Meridian，在弹窗里点「仍要打开」或「打开」。
+   之后就和普通应用一样，不会再提示。
+
+macOS 14 及更早的系统更简单：在「应用程序」里按住 Control 键点 Meridian，
+选「打开」，再在弹窗里点「打开」。
+
+子午启动后没有 Dock 图标，在屏幕右上角的菜单栏里找它的圆形图标。
+
+完整说明：
+https://github.com/YuKiBi0/Meridian/blob/main/docs/INSTALL-macOS.md
+
+
+Meridian · Installing on macOS
+
+1. Drag Meridian onto the Applications folder.
+2. Open Applications and double-click Meridian. macOS says it cannot
+   verify the app; click Done (or OK). Meridian is not signed with a paid
+   Apple developer certificate. It is not malware.
+3. Open System Settings > Privacy & Security, scroll to the bottom and
+   click "Open Anyway" next to the Meridian message. Enter your password.
+4. Double-click Meridian again and click "Open Anyway" (or "Open").
+   From then on it opens like any other app.
+
+On macOS 14 or earlier: Control-click Meridian in Applications, choose
+Open, then click Open.
+
+Meridian has no Dock icon. Look for its round icon in the menu bar.

@@ -105,7 +105,7 @@ EOF
 }
 
 cmd_publish() {
-  local notes=${1:-} v tag zh en run asset
+  local notes=${1:-} v tag zh en
   command -v gh >/dev/null || die "需要 gh（GitHub CLI）"
   [ -z "$notes" ] || [ -f "$notes" ] || die "找不到发布说明 $notes"
   [ "$(git rev-parse --abbrev-ref HEAD)" = main ] || die "请在 main 分支上发布"
@@ -132,18 +132,25 @@ cmd_publish() {
     gh release create "$tag" --verify-tag --latest --title "$tag · $zh" --generate-notes
   fi
 
-  say "等待 client-windows 构建 Windows 包……"
+  wait_client "$tag" client-windows Meridian-windows-x64.zip
+  wait_client "$tag" client-macos Meridian-macos.dmg
+  say "已发布：$(gh release view "$tag" --json url --jq .url)"
+}
+
+# Waits for a client workflow on the tag and checks its release asset.
+wait_client() {
+  local tag=$1 workflow=$2 file=$3 run='' asset
+  say "等待 $workflow 构建 $file……"
   for _ in $(seq 30); do
-    run=$(gh run list --workflow client-windows.yml --branch "$tag" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+    run=$(gh run list --workflow "$workflow.yml" --branch "$tag" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
     [ -n "$run" ] && break
     sleep 5
   done
-  [ -n "${run:-}" ] || die "没找到 $tag 的构建，去 Actions 页面看一下"
+  [ -n "$run" ] || die "没找到 $tag 的 $workflow 构建，去 Actions 页面看一下"
   gh run watch "$run" --exit-status --interval 30 >/dev/null || die "构建失败：gh run view $run --log-failed"
 
-  asset=$(gh release view "$tag" --json assets --jq '.assets[].name' | grep -c 'Meridian-windows-x64.zip' || true)
-  [ "$asset" = 1 ] || die "Release 上没有 Meridian-windows-x64.zip"
-  say "已发布：$(gh release view "$tag" --json url --jq .url)"
+  asset=$(gh release view "$tag" --json assets --jq '.assets[].name' | grep -cx "$file" || true)
+  [ "$asset" = 1 ] || die "Release 上没有 $file"
 }
 
 cmd_deploy() {

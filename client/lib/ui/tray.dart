@@ -1,14 +1,17 @@
 /// Tray icon and the menu shared by the tray and the window (PRD §8.5).
 library;
 
-import 'dart:ui';
+import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart' show Menu, MenuItem, trayManager;
 
 import '../core/display.dart';
 import '../settings.dart';
 import 'colors.dart';
 import 'l10n.dart';
+import 'theme.dart';
 import 'tray_icon.dart';
 
 enum TrayDot { hollow, solid, running, alert }
@@ -43,6 +46,7 @@ class Tray {
   /// running dot takes the progress colour [accent].
   Future<void> setIcon(TrayDot dot, Brightness brightness, Color accent) async {
     final request = ++_iconRequest;
+    if (Platform.isMacOS) return _setMenuBarIcon(request, dot, brightness, accent);
     final theme = brightness == Brightness.dark ? 'paper' : 'ink';
     var path = 'assets/tray/${dot.name}_$theme.ico';
     if (dot == TrayDot.running && accent != defaultAccent) {
@@ -56,6 +60,36 @@ class Tray {
     if (request != _iconRequest || path == _icon) return; // superseded or unchanged
     _icon = path;
     await trayManager.setIcon(path);
+  }
+
+  /// The bundled PNG, or one drawn in the progress colour. trayManager.setIcon
+  /// only takes bundled assets on macOS, so this sends the image the way it
+  /// does (tray_manager 0.5, TrayManagerPlugin.swift).
+  Future<void> _setMenuBarIcon(int request, TrayDot dot, Brightness brightness, Color accent) async {
+    final theme = brightness == Brightness.dark ? 'paper' : 'ink';
+    final custom = dot == TrayDot.running && accent != defaultAccent;
+    final key = '${dot.name}_$theme${custom ? ':${accent.toARGB32()}' : ''}';
+    if (key == _icon) return;
+    Uint8List? png;
+    if (custom) {
+      try {
+        final p = brightness == Brightness.dark ? Palette.dark : Palette.light;
+        png = await menuBarIcon(p.fg, accent);
+      } catch (_) {
+        // Keep the bundled amber icon.
+      }
+    }
+    png ??= (await rootBundle.load('assets/tray/${dot.name}_$theme.png')).buffer.asUint8List();
+    if (request != _iconRequest) return; // superseded
+    _icon = key;
+    await const MethodChannel('tray_manager').invokeMethod('setIcon', {
+      'id': key,
+      'iconPath': '',
+      'base64Icon': base64Encode(png),
+      'isTemplate': false,
+      'iconPosition': 'left',
+      'iconSize': 18,
+    });
   }
 
   Future<void> setTooltip(String text) async {

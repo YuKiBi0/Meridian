@@ -1,0 +1,74 @@
+name: client-macos
+
+on:
+  push:
+    branches: [main, develop, 'feature/client**']
+    paths: ['client/**', '.github/workflows/client-macos.yml']
+    tags: ['v*']
+  pull_request:
+    paths: ['client/**', '.github/workflows/client-macos.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter test test/core_test.dart test/geometry_test.dart test/colors_test.dart
+      - name: Window integration test
+        run: flutter test integration_test -d macos
+      - run: flutter build macos --release
+
+      # No Apple developer certificate: sign ad hoc, so the app runs on Apple
+      # silicon and Gatekeeper offers "Open Anyway" instead of calling it
+      # damaged (docs/INSTALL-macOS.md).
+      - name: Sign ad hoc
+        run: |
+          app=build/macos/Build/Products/Release/Meridian.app
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          lipo -archs "$app/Contents/MacOS/Meridian"
+
+      - name: Smoke test
+        run: |
+          app=build/macos/Build/Products/Release/Meridian.app
+          "$app/Contents/MacOS/Meridian" &
+          pid=$!
+          sleep 8
+          screencapture -x smoke.png
+          kill -0 "$pid" || { echo "Meridian exited on launch"; exit 1; }
+          kill "$pid"
+
+      - name: Package
+        run: |
+          stage=$(mktemp -d)
+          cp -R build/macos/Build/Products/Release/Meridian.app "$stage/"
+          ln -s /Applications "$stage/Applications"
+          cp "macos/packaging/打不开？看这里.txt" "$stage/"
+          hdiutil create -volname "Meridian" -srcfolder "$stage" -fs HFS+ -format UDZO -ov Meridian-macos.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Meridian-macos
+          path: |
+            client/Meridian-macos.dmg
+            client/smoke.png
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: client/Meridian-macos.dmg

@@ -65,6 +65,21 @@ Uint8List encodeIco(List<IconImage> images) {
 
 /// Draws the tray mark with a filled dot of [dot] on a 16-unit grid.
 Future<IconImage> renderMark(int size, Color body, Color dot) async {
+  final image = await _drawMark(size, body, dot);
+  final bytes = await image.toByteData(format: ImageByteFormat.rawStraightRgba);
+  image.dispose();
+  return (size: size, rgba: bytes!.buffer.asUint8List());
+}
+
+/// The macOS menu bar icon as a PNG, drawn at twice its 18 pt size.
+Future<Uint8List> menuBarIcon(Color body, Color dot) async {
+  final image = await _drawMark(36, body, dot);
+  final bytes = await image.toByteData(format: ImageByteFormat.png);
+  image.dispose();
+  return bytes!.buffer.asUint8List();
+}
+
+Future<Image> _drawMark(int size, Color body, Color dot) {
   final recorder = PictureRecorder();
   final canvas = Canvas(recorder)..scale(size / 16);
   final stroke = Paint()
@@ -75,10 +90,7 @@ Future<IconImage> renderMark(int size, Color body, Color dot) async {
     ..drawCircle(const Offset(8, 8), 6, stroke)
     ..drawLine(const Offset(8, 1), const Offset(8, 15), stroke)
     ..drawCircle(const Offset(8, 5.67), 2.25, Paint()..color = dot);
-  final image = await recorder.endRecording().toImage(size, size);
-  final bytes = await image.toByteData(format: ImageByteFormat.rawStraightRgba);
-  image.dispose();
-  return (size: size, rgba: bytes!.buffer.asUint8List());
+  return recorder.endRecording().toImage(size, size);
 }
 
 /// Writes (once) and returns the path of the "running" icon in [dot] for a
