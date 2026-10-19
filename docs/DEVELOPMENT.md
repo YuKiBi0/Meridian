@@ -78,6 +78,6 @@ Windows 托盘图标与两个平台的应用图标由 `tool/gen_icons.sh` 生成
 ## 分支与发布
 
 - 每个功能从 `develop` 开 `feature/*` 分支，通过 PR 合回 `develop`。
-- 发布时把 `develop` 合到 `main`，打 `v*` 标签；`client-windows` 与 `client-macos` 流水线会构建 Windows 包和 macOS DMG 并附到 GitHub Release。macOS 包没有开发者签名，只做本地签名（ad hoc），用户第一次打开需要手动放行，见 [Mac 安装说明](INSTALL-macOS.md)。
+- 发布时把 `develop` 合到 `main`，打 `v*` 标签；`client-windows` 流水线会构建 Windows 包并附到 GitHub Release。`client-macos` 只手动运行（macOS runner 费用高），在标签上运行即可把 DMG 附到该版本，见 [发版](RELEASING.md)。macOS 包没有开发者签名，只做本地签名（ad hoc），用户第一次打开需要手动放行，见 [Mac 安装说明](INSTALL-macOS.md)。
 - 版本代号按二十四节气顺序排列，见 [DESIGN](DESIGN.md) 4.3。
 - 完整的发版步骤与 `scripts/release.sh` 用法见 [发版](RELEASING.md)。

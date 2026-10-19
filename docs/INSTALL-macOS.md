@@ -6,7 +6,7 @@
 
 ## 1. 下载并拖进「应用程序」
 
-1. 在 [Releases](https://github.com/YuKiBi0/Meridian/releases/latest) 页面下载 `Meridian-macos.dmg`。
+1. 在 [Releases](https://github.com/YuKiBi0/Meridian/releases) 页面找到附有 `Meridian-macos.dmg` 的最新版本（目前是 [v1.2.0](https://github.com/YuKiBi0/Meridian/releases/tag/v1.2.0)），下载它。Mac 包不随每次发布构建。
 2. 双击打开它，把 **Meridian** 拖到旁边的 **Applications（应用程序）** 文件夹上。
 3. 在 Finder 侧边栏点 ⏏ 推出「Meridian」磁盘。
 
@@ -61,7 +61,7 @@ macOS 只直接放行经过苹果公证的应用，公证需要每年付费的 A
 
 Meridian is not signed with a paid Apple developer certificate, so macOS blocks the first launch. You only do this once. Requires macOS 12 or later on Intel or Apple silicon; launch at startup needs macOS 13.
 
-1. Download `Meridian-macos.dmg` from [Releases](https://github.com/YuKiBi0/Meridian/releases/latest), open it and drag **Meridian** onto **Applications**.
+1. Download `Meridian-macos.dmg` from the newest release that has one (currently [v1.2.0](https://github.com/YuKiBi0/Meridian/releases/tag/v1.2.0)), open it and drag **Meridian** onto **Applications**.
 2. **macOS 15 and later:** double-click Meridian in Applications and click **Done**. Open **System Settings → Privacy & Security**, scroll down, click **Open Anyway** next to the Meridian message and confirm with your password. Click **Open Anyway** once more.
    **macOS 14 and earlier:** Control-click Meridian in Applications, choose **Open**, then click **Open**.
 3. Meridian has no Dock icon. It lives in the menu bar as a small circle with a vertical line.

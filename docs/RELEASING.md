@@ -63,7 +63,13 @@ scripts/release.sh publish notes.md    # 或者用自己写的说明
 1. 检查当前在 `main`、工作区干净、与 `origin/main` 一致、各处版本号相同、标签还不存在；
 2. 确认后打带说明的标签 `vX.Y.Z` 并推送；
 3. 创建标题为 `vX.Y.Z · 节气` 的 GitHub Release，并标为最新；
-4. 等待 `client-windows` 与 `client-macos` 流水线构建完成，确认 `Meridian-windows-x64.zip` 和 `Meridian-macos.dmg` 都已附到 Release 上。
+4. 等待 `client-windows` 流水线构建完成，确认 `Meridian-windows-x64.zip` 已附到 Release 上。
+
+**Mac 包（可选）。** macOS runner 费用高，`client-macos` 不随推送或标签自动运行，最近一次构建的是 v1.2.0。需要给某个版本附上 DMG 时，在标签上手动运行，完成后 `Meridian-macos.dmg` 会附到该 Release：
+
+```sh
+gh workflow run client-macos.yml --ref vX.Y.Z
+```
 
 自己写说明时可以参考 [v1.0.0](https://github.com/YuKiBi0/Meridian/releases/tag/v1.0.0)：下载方式、新增与修复、已知限制。
 

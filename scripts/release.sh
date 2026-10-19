@@ -133,7 +133,6 @@ cmd_publish() {
   fi
 
   wait_client "$tag" client-windows Meridian-windows-x64.zip
-  wait_client "$tag" client-macos Meridian-macos.dmg
   say "已发布：$(gh release view "$tag" --json url --jq .url)"
 }
 

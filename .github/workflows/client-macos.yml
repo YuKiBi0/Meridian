@@ -1,12 +1,9 @@
 name: client-macos
 
+# Manual only: macOS runners cost too much to run on every push. Run it on
+# a release tag to attach the DMG to that release (docs/RELEASING.md):
+#   gh workflow run client-macos.yml --ref vX.Y.Z
 on:
-  push:
-    branches: [main, develop, 'feature/client**']
-    paths: ['client/**', '.github/workflows/client-macos.yml']
-    tags: ['v*']
-  pull_request:
-    paths: ['client/**', '.github/workflows/client-macos.yml']
   workflow_dispatch:
 
 permissions:
