@@ -9,7 +9,7 @@
 一个自部署的倒计时同步工具。<br>
 在网页上开始一次倒计时，每一台电脑的屏幕边缘都会同时出现同一个剩余时间。
 
-[![Release](https://img.shields.io/github/v/release/YuKiBi0/Meridian?label=release&color=111418)](https://github.com/YuKiBi0/Meridian/releases/latest) [![ci](https://github.com/YuKiBi0/Meridian/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/ci.yml) [![client-windows](https://github.com/YuKiBi0/Meridian/actions/workflows/client-windows.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/client-windows.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-E0A94A)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/YuKiBi0/Meridian?label=release&color=111418)](https://github.com/YuKiBi0/Meridian/releases/latest) [![ci](https://github.com/YuKiBi0/Meridian/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/ci.yml) [![client-windows](https://github.com/YuKiBi0/Meridian/actions/workflows/client-windows.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/client-windows.yml) [![client-macos](https://github.com/YuKiBi0/Meridian/actions/workflows/client-macos.yml/badge.svg?branch=main)](https://github.com/YuKiBi0/Meridian/actions/workflows/client-macos.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-E0A94A)](LICENSE)
 
 [下载客户端](https://github.com/YuKiBi0/Meridian/releases/latest) · [部署服务](docs/DEPLOYMENT.md) · [产品需求](docs/PRD.md) · [设计理念](docs/DESIGN.md) · [参与开发](docs/DEVELOPMENT.md)
 
@@ -54,7 +54,7 @@ flowchart LR
 | --- | --- | --- |
 | **子午服务** | 部署者 | 一个 Go 程序加 PostgreSQL，控制台已内置；Docker Compose 一条命令启动 |
 | **子午控制台** | 操作者 | 网页，电脑和手机都能用；管理房间，开始、暂停、加减时间，管理预设和提醒 |
-| **子午客户端** | 观看者 | Windows 桌面程序；填一个房间地址，只负责显示，选样式、摆位置 |
+| **子午客户端** | 观看者 | Windows / macOS 桌面程序；填一个房间地址，只负责显示，选样式、摆位置 |
 
 ## 快速开始
 
@@ -69,9 +69,12 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 
 **2. 打开控制台，新建房间。** 访问 `https://<你的域名>/meridian/`，用口令登录，点「新建房间」并起个名字。进入房间后，右上方的「客户端地址」就是给客户端填的地址，点「复制」即可。
 
-**3. 安装客户端。** 从 [Releases](https://github.com/YuKiBi0/Meridian/releases/latest) 下载 `Meridian-windows-x64.zip`，解压后运行 `meridian.exe`，粘贴房间地址，形如 `https://<你的域名>/meridian/?r=<房间 id>`。
+**3. 安装客户端。** 从 [Releases](https://github.com/YuKiBi0/Meridian/releases/latest) 下载对应系统的安装包，打开后粘贴房间地址，形如 `https://<你的域名>/meridian/?r=<房间 id>`。
 
-支持 Windows 10 1809 及以上、Windows 11（x64）。
+| 系统 | 下载 | 安装 |
+| --- | --- | --- |
+| Windows 10 1809+ / 11（x64） | `Meridian-windows-x64.zip` | 解压后运行 `meridian.exe` |
+| macOS 12+（Intel 与 Apple 芯片） | `Meridian-macos.dmg` | 拖进「应用程序」；第一次打开需要手动放行，见 **[Mac 安装说明](docs/INSTALL-macOS.md)** |
 
 ## 控制台
 
@@ -124,7 +127,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 
 ### 操作
 
-- **右键**窗口，或点**托盘图标**：切换样式、贴边位置、窗口置顶、鼠标穿透，打开设置。
+- **右键**窗口，或点**托盘图标**（macOS 在菜单栏）：切换样式、贴边位置、窗口置顶、鼠标穿透，打开设置。
 - **双击**窗口：打开设置。
 - **拖动**圆环或数字：自由摆放；拖到离屏幕边缘 24px 以内会自动贴上去。
 - **悬停**托盘图标：显示「标题 · 剩余时间」或连接状态。
@@ -147,13 +150,14 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 
 ### 托盘图标
 
-图标上竖线中间的那个点表示状态：空心为未连接，实心为已连接但没在走，琥珀色（或你选的进度颜色）为进行中，朱红为最后一段或时间到。
+Windows 在任务栏右下角，macOS 在屏幕右上角的菜单栏（macOS 版没有 Dock 图标）。图标上竖线中间的那个点表示状态：空心为未连接，实心为已连接但没在走，琥珀色（或你选的进度颜色）为进行中，朱红为最后一段或时间到。
 
 ## 文档
 
 | 文档 | 内容 |
 | --- | --- |
 | [部署](docs/DEPLOYMENT.md) | Docker Compose、nginx 反向代理、环境变量 |
+| [Mac 安装说明](docs/INSTALL-macOS.md) | 第一次打开未签名应用的步骤、常见问题 |
 | [产品需求](docs/PRD.md) | 完整的功能需求、状态机、接口与协议、数据模型 |
 | [设计理念](docs/DESIGN.md) | 用词、配色、字体、动效与各个决定背后的理由 |
 | [开发](docs/DEVELOPMENT.md) | 本地运行、测试与构建 |

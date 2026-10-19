@@ -27,7 +27,7 @@
 
 - **子午服务**（Go）持有若干「房间」，每个房间一个倒计时，通过 SSE 把状态推给房间里的所有人。
 - **子午控制台**（网页）给操作者开始、暂停、延长、结束倒计时，管理预设和提醒。
-- **子午**（Flutter Windows 客户端）只填一个房间地址就能显示该房间的倒计时，可以贴在屏幕边缘、保持置顶，收到提醒时弹出自绘卡片。
+- **子午**（Flutter 桌面客户端，Windows 与 macOS）只填一个房间地址就能显示该房间的倒计时，可以贴在屏幕边缘、保持置顶，收到提醒时弹出自绘卡片。
 
 ### 1.3 目标
 
@@ -44,7 +44,7 @@
 - 账号体系、多租户、权限分级。控制台只有一个管理口令。
 - 多路并行倒计时：1.0 不做；1.1 起以「房间」提供，见 D-11。
 - 正计时 / 秒表（「超时」计数除外）。
-- 移动端、macOS、Linux 客户端（Flutter 可以以后再扩）。
+- 移动端、Linux 客户端（Flutter 可以以后再扩）。macOS 客户端自 1.2 起提供，见 D-12。
 - 系统通知中心通知、提示音。
 - 客户端反向控制倒计时。
 - 订阅端（SSE）鉴权。倒计时信息不是敏感信息。
@@ -58,7 +58,7 @@
 | 角色 | 用什么 | 做什么 |
 | --- | --- | --- |
 | 操作者 | 子午控制台（浏览器，电脑或手机） | 开始、暂停、延长、结束；维护预设和提醒 |
-| 观看者 | 子午客户端（Windows） | 只看。选样式、摆位置 |
+| 观看者 | 子午客户端（Windows / macOS） | 只看。选样式、摆位置 |
 | 部署者 | 服务器 + Docker | 部署、配置口令、配反向代理 |
 
 ### 2.2 典型场景
@@ -87,7 +87,7 @@ flowchart LR
   end
   Console[子午控制台<br/>浏览器] -->|HTTPS REST + Cookie| Nginx
   Console -->|SSE| Nginx
-  Clients[子午客户端 × N<br/>Windows] -->|SSE| Nginx
+  Clients[子午客户端 × N<br/>Windows / macOS] -->|SSE| Nginx
 ```
 
 ### 3.2 组件与技术选型
@@ -98,7 +98,7 @@ flowchart LR
 | 数据库 | **PostgreSQL 17**，驱动 `pgx/v5` | 持久化预设、当前计时、操作记录；与服务一同用 compose 部署 |
 | 数据库迁移 | SQL 文件 `embed` 进二进制，启动时按版本号顺序执行 | 不引入额外工具，部署零步骤 |
 | 控制台 | Vue 3 + Vite + TypeScript，不用组件库 | 产物小（< 200KB）、原生文字渲染、手机可用、内网无外网也能用；视觉完全按 DESIGN.md 手写 |
-| 客户端 | Flutter（Windows 桌面） | 需求指定；自绘 UI 灵活 |
+| 客户端 | Flutter（Windows / macOS 桌面） | 需求指定；自绘 UI 灵活 |
 | 客户端插件 | `window_manager`、`screen_retriever`、`tray_manager`、`shared_preferences`、`http`、`launch_at_startup` | 无边框透明窗口、置顶、穿透、多屏、托盘、开机启动 |
 | 部署 | Docker 多阶段构建 + docker compose；宿主机 nginx 反向代理 | 需求指定 |
 
@@ -339,7 +339,9 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 
 ## 8. 功能需求：客户端
 
-窗口标题：`子午`（英文 `Meridian`）。平台：Windows 10 1809+ / Windows 11，x64。
+窗口标题：`子午`（英文 `Meridian`）。平台：Windows 10 1809+ / Windows 11，x64；macOS 12+，Intel 与 Apple 芯片（通用二进制）。
+
+macOS 上「托盘」指菜单栏图标；应用不显示 Dock 图标；「开机启动」使用登录项，需要 macOS 13+。以下需求两个平台相同，除非另有说明。
 
 ### 8.1 连接
 
@@ -406,7 +408,7 @@ running / paused 时可整体替换提醒列表，约束同 5.6（以当前 tota
 
 | 编号 | 需求 | 优先级 |
 | --- | --- | --- |
-| CLI-60 | 收到 `reminder` 后在客户端窗口内绘制卡片，不调用 Windows 通知 API | P0 |
+| CLI-60 | 收到 `reminder` 后在客户端窗口内绘制卡片，不调用系统通知 | P0 |
 | CLI-61 | 窗口临时向屏幕内侧扩展以容纳卡片（顶部条形向下、右侧条形向左、角落圆环向屏幕中心），卡片消失后恢复原尺寸 | P0 |
 | CLI-62 | 卡片内容：标题（小号、灰）、提示内容；底部一条细线表示剩余显示时间。提醒点 ≤ 警示阈值或为 0 时，细线用朱红 | P0 |
 | CLI-63 | 点击卡片或「知道了」关闭；「需手动关闭」的提醒不自动消失 | P0 |
@@ -716,7 +718,7 @@ location ^~ /meridian/ {
 ### 11.4 发布
 
 - 服务端：`docker compose -f deploy/docker-compose.yml up -d --build`。
-- 客户端：GitHub Actions 在 Windows runner 上 `flutter build windows`，产出便携 zip（P0）与安装包（Inno Setup，P1），挂到 GitHub Release。
+- 客户端：GitHub Actions 在 Windows runner 上 `flutter build windows`，产出便携 zip（P0）与安装包（Inno Setup，P1）；在 macOS runner 上 `flutter build macos`，本地签名（ad hoc）后打包为 DMG（P0）。都挂到 GitHub Release。
 
 ---
 
@@ -780,6 +782,7 @@ location ^~ /meridian/ {
 | v0.7 | 立夏 | 英文界面、在线数、操作记录、并发冲突、Windows 打包与 Release 流水线 | 全部 P1 |
 | v1.0 | 小满 | 稳定性与全量验收 | 全部 P0 / P1 验收通过 |
 | v1.1 | 芒种 | 多房间：房间增删改、各自计时，客户端以 `?r=` 加入；1.0 计时迁移为「默认房间」 | SRV-16 ~ 18、CON-19 ~ 21、CLI-01 ~ 03 / 07 |
+| v1.2 | 夏至 | macOS 客户端：菜单栏图标、不抢焦点的无边框窗口、登录项；DMG 流水线与安装说明 | 窗口集成测试在 macOS runner 通过；真实 Mac 上完成第 8 章验收 |
 
 > 实际进度：v0.4（春分）一次交付了表中 v0.4 ~ v0.6 的客户端功能和 Windows 安装包流水线（v0.7）；之后补上进度颜色、减少时间、计时中编辑提醒、多控制台同步，并在真实 Windows 桌面上验收后发布 **v1.0.0（小满）**。提醒卡片自定义位置曾实现但影响窗口贴边，已撤回，卡片沿用跟随计时器的方式。
 >
@@ -802,3 +805,4 @@ location ^~ /meridian/ {
 | D-9 | 客户端的窗口定位、置顶、鼠标穿透、不透明度走 runner 内自写的 `meridian/window` 原生通道，不用 `window_manager` 的对应接口 | `window_manager` 置顶时调用 `SetWindowPos` 不带 `SWP_NOACTIVATE`，每 5 秒的置顶守护会把焦点从演示软件抢走；按物理像素定位也避免了混合 DPI 下的换算误差 |
 | D-10 | 托盘使用 `tray_manager` 0.5.x | 0.8 是基于 nativeapi 的重写版，尚不成熟 |
 | D-11 | 多房间：房间 id 用 UUIDv7，放在查询参数 `?r=` 里；房间名可以重复；预设所有房间共用；订阅仍不鉴权 | 客户端地址就是控制台里复制来的那一串，不用另填房间号；UUIDv7 按时间排序且难以猜到，知道地址即可加入，与 D-6 一致；房间名只为辨认，不必唯一 |
+| D-12 | macOS 客户端不做苹果公证，DMG 只做本地签名（ad hoc），用户第一次打开时在「隐私与安全性」里手动放行；窗口用无边框、不激活的 NSPanel，原生通道与 Windows 同名同参 | 公证需要付费的开发者账号；本地签名让 Apple 芯片能运行，并让系统给出「仍要打开」而不是「已损坏」。放行步骤写在 DMG 内的说明与 docs/INSTALL-macOS.md。共用通道让布局代码不分平台 |
