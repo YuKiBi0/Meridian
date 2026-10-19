@@ -42,8 +42,9 @@ class MainFlutterWindow: NSPanel {
     backgroundColor = .clear
     hasShadow = false
     hidesOnDeactivate = false
-    // Show on every desktop, including over full-screen apps.
-    collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    // Show on every desktop, including over full-screen apps, and stay put
+    // when the desktop is shown (e.g. by clicking the wallpaper).
+    collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
